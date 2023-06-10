@@ -1,11 +1,9 @@
 [package]
-name = "rust-test"
+name = "music-player"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies.gtk]
-package = "gtk4"
-version = "0.6.6"
-features = ["v4_10"]
+[dependencies]
+gtk = { package = "gtk4", version = "0.6.6", features = ["v4_10"] }
+diesel = { version = "2.1.0", features = ["sqlite"] }
+dotenvy = { version = "0.15.7" }
