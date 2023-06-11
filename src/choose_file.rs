@@ -5,6 +5,7 @@ use diesel::{ExpressionMethods, insert_into, RunQueryDsl};
 use gtk::{glib, Button, FileChooserDialog, ResponseType};
 use gtk::glib::{clone, MainContext};
 use gtk::prelude::{DialogExtManual, FileExt, GtkWindowExt, FileChooserExt};
+use log::error;
 use crate::CONNECTION;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
@@ -19,9 +20,17 @@ pub fn choose_file(_button: &Button) {
                     if let Some(path_string) = path_buf.to_str() {
                         if let Ok(mut connection) = CONNECTION.deref().get() {
                             insert_into(collections).values(path.eq(path_string)).execute(&mut connection).ok();
+                        } else {
+                            error!("error getting connection for pool")
                         }
+                    } else {
+                        error!("path with no string")
                     }
+                } else {
+                    error!("file with no path")
                 }
+            } else {
+                error!("ok dialog response but no files chosen")
             }
         }
         dialog.close();

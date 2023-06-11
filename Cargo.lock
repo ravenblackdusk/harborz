@@ -518,6 +518,7 @@ dependencies = [
  "diesel",
  "dotenvy",
  "gtk4",
+ "log",
  "once_cell",
 ]
 
