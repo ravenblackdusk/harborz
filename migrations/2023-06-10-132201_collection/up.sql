@@ -5,3 +5,6 @@ create table collections
             primary key autoincrement,
     path TEXT    not null
 );
+
+create unique index collections_path_uindex
+    on collections (path);
