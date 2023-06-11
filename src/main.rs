@@ -20,6 +20,7 @@ static CONNECTION: Lazy<Pool<ConnectionManager<SqliteConnection>>> = Lazy::new(|
 });
 
 fn main() {
+    std_logger::Config::logfmt().init();
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|app| {
         let grid = Grid::builder().build();

@@ -2,35 +2,30 @@
 
 use std::ops::{Deref};
 use diesel::{ExpressionMethods, insert_into, RunQueryDsl};
-use gtk::{glib, Button, FileChooserDialog, ResponseType};
+use diesel::result::DatabaseErrorKind::UniqueViolation;
+use diesel::result::Error::DatabaseError;
+use gtk::{glib, Button, FileChooserDialog, ResponseType, FileChooserAction};
 use gtk::glib::{clone, MainContext};
 use gtk::prelude::{DialogExtManual, FileExt, GtkWindowExt, FileChooserExt};
-use log::error;
+use log::warn;
 use crate::CONNECTION;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 
 pub fn choose_file(_button: &Button) {
-    let dialog = FileChooserDialog::builder().title("my title").build();
+    let dialog = FileChooserDialog::builder().title("my title")
+        .action(FileChooserAction::SelectFolder).build();
     dialog.add_buttons(&[("cancel", ResponseType::Cancel), ("ok", ResponseType::Ok)]);
     MainContext::default().spawn_local(clone!(@weak dialog => async move {
         if dialog.run_future().await == ResponseType::Ok {
-            if let Some(file) = dialog.file() {
-                if let Some(path_buf) = file.path() {
-                    if let Some(path_string) = path_buf.to_str() {
-                        if let Ok(mut connection) = CONNECTION.deref().get() {
-                            insert_into(collections).values(path.eq(path_string)).execute(&mut connection).ok();
-                        } else {
-                            error!("error getting connection for pool")
-                        }
-                    } else {
-                        error!("path with no string")
-                    }
-                } else {
-                    error!("file with no path")
-                }
-            } else {
-                error!("ok dialog response but no files chosen")
+            match insert_into(collections).values(
+                path.eq(dialog.file().expect("ok dialog should have file").path()
+                    .expect("file should have path").to_str()
+                    .expect("path should be convertable to string"))
+            ).execute(&mut CONNECTION.deref().get().expect("should be able to get connection from pool")) {
+                Err(DatabaseError(UniqueViolation, _)) => warn!("directory already added to collection"),
+                Err(error) => panic!("{error:?}"),
+                _ => {},
             }
         }
         dialog.close();
