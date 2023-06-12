@@ -12,14 +12,15 @@ use gtk::traits::{ButtonExt, GridExt};
 use once_cell::sync::Lazy;
 use crate::choose_file::choose_file;
 
+const DATABASE_URL: &'static str = "DATABASE_URL";
 static CONNECTION: Lazy<Pool<ConnectionManager<SqliteConnection>>> = Lazy::new(|| {
-    dotenv().ok();
-    let database_url = var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url = var(DATABASE_URL).expect(format!("{} must be set", DATABASE_URL).as_str());
     Pool::builder().test_on_check_out(true).build(ConnectionManager::<SqliteConnection>::new(database_url))
         .expect("Could not build connection pool")
 });
 
 fn main() {
+    dotenv().ok();
     std_logger::Config::logfmt().init();
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|app| {
