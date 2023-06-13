@@ -3,16 +3,16 @@
 use std::collections::HashSet;
 use anyhow::{anyhow, Result};
 use diesel::{ExpressionMethods, insert_or_ignore_into, RunQueryDsl};
-use gtk::FileChooserAction::SelectFolder;
-use gtk::{glib, FileChooserDialog, ResponseType, Label};
-use gtk::gio::File;
-use gtk::glib::{clone, MainContext, Object};
-use gtk::prelude::*;
+use gtk::*;
+use prelude::*;
+use gio::File;
+use glib::{clone, MainContext, Object};
+use FileChooserAction::SelectFolder;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 
-async fn add_directory_to_collection(dialog: &FileChooserDialog, collection_box: &gtk::Box) -> Result<()> {
+async fn add_directory_to_collection(dialog: &FileChooserDialog, collection_box: &Box) -> Result<()> {
     if dialog.run_future().await == ResponseType::Ok {
         let paths = dialog.files().iter::<File>().map(|file| { Some(file.ok()?.path()?.to_str()?.to_owned()) })
             .collect::<Option<Vec<_>>>().ok_or(anyhow!("error trying to get paths"))?;
@@ -29,7 +29,7 @@ async fn add_directory_to_collection(dialog: &FileChooserDialog, collection_box:
     Ok(dialog.close())
 }
 
-pub fn choose_file(collection_box: &gtk::Box) {
+pub fn choose_file(collection_box: &Box) {
     let dialog = FileChooserDialog::builder().title("choose collection directories")
         .action(SelectFolder).select_multiple(true).build();
     dialog.add_buttons(&[("cancel", ResponseType::Cancel), ("choose", ResponseType::Ok)]);

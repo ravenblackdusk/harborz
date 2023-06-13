@@ -3,14 +3,14 @@ mod schema;
 mod models;
 mod db;
 
-use diesel::{RunQueryDsl};
+use diesel::{delete, QueryDsl, RunQueryDsl};
 use dotenvy::dotenv;
-use gtk::{Application, ApplicationWindow, Button, Grid, Label};
-use gtk::glib;
+use gtk::*;
+use prelude::*;
+use traits::{BoxExt, ButtonExt, GridExt};
+use Orientation::Vertical;
 use glib::clone;
-use gtk::prelude::*;
-use gtk::traits::{BoxExt, ButtonExt, GridExt};
-use gtk::Orientation::Vertical;
+use gtk::Orientation::Horizontal;
 use crate::choose_file::choose_file;
 use crate::db::get_connection;
 use crate::models::Collection;
@@ -21,19 +21,26 @@ fn main() {
     std_logger::Config::logfmt().init();
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|application| {
-        let grid = Grid::builder().build();
-        let window = ApplicationWindow::builder().application(application).title("music player")
-            .child(&grid).build();
-        let browse_button = Button::builder().label("browse").build();
-        let collection_box = gtk::Box::builder().orientation(Vertical).build();
-        browse_button.connect_clicked(clone!(@weak collection_box => move |_| { choose_file(&collection_box); }));
-        for collection in collections.load::<Collection>(&mut get_connection()).expect("should be able to get collections from db") {
-            collection_box.append(&Label::builder().label(collection.path).build());
+        let collection_box = Box::builder().orientation(Vertical).build();
+        for collection in collections.load::<Collection>(&mut get_connection()).expect("should be able to get collections") {
+            let collection_remove = Box::builder().orientation(Horizontal).build();
+            let remove_button = Button::builder().label("-").build();
+            remove_button.connect_clicked(clone!(@weak collection_box, @weak collection_remove => move |_| {
+                delete(collections.find(collection.id)).execute(&mut get_connection())
+                    .expect("should be able to delete collection");
+                collection_box.remove(&collection_remove);
+            }));
+            collection_remove.append(&Label::builder().label(collection.path).build());
+            collection_remove.append(&remove_button);
+            collection_box.append(&collection_remove);
         }
+        let browse_button = Button::builder().label("browse").build();
+        browse_button.connect_clicked(clone!(@weak collection_box => move |_| { choose_file(&collection_box); }));
+        let grid = Grid::builder().build();
         grid.attach(&collection_box, 0, 0, 1, 1);
         grid.attach(&browse_button, 0, 1, 1, 1);
-        grid.attach(&Button::builder().label("Click me!").build(), 1, 1, 1, 1);
-        window.present();
+        ApplicationWindow::builder().application(application).title("music player").child(&grid)
+            .build().present();
     });
     application.run();
 }
