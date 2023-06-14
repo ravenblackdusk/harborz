@@ -1,30 +1,28 @@
 #![allow(deprecated)]
 
-use std::collections::HashSet;
 use anyhow::{anyhow, Result};
 use diesel::{ExpressionMethods, insert_or_ignore_into, RunQueryDsl};
+use diesel::result::Error;
 use gtk::*;
 use prelude::*;
 use gio::File;
-use glib::{clone, MainContext, Object};
+use glib::{clone, MainContext};
 use FileChooserAction::SelectFolder;
 use crate::db::get_connection;
+use crate::models::Collection;
+use crate::Removable;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 
 async fn add_directory_to_collection(dialog: &FileChooserDialog, collection_box: &Box) -> Result<()> {
     if dialog.run_future().await == ResponseType::Ok {
-        let paths = dialog.files().iter::<File>().map(|file| { Some(file.ok()?.path()?.to_str()?.to_owned()) })
-            .collect::<Option<Vec<_>>>().ok_or(anyhow!("error trying to get paths"))?;
-        insert_or_ignore_into(collections)
-            .values(paths.iter().map(|path_string| { path.eq(path_string) }).collect::<Vec<_>>())
-            .execute(&mut get_connection())?;
-        let existing_paths = collection_box.observe_children().iter::<Object>().map(|child| {
-            Ok(child?.downcast::<Label>().map_err(|object| { anyhow!("error downcasting {:?}", object) })?.label().to_string())
-        }).collect::<Result<HashSet<_>>>()?;
-        for added_path in paths.into_iter().filter(|added_path| { !existing_paths.contains(added_path) }) {
-            collection_box.append(&Label::builder().label(added_path).build())
-        }
+        dialog.files().iter::<File>().map(|file| { Some(file.ok()?.path()?.to_str()?.to_owned()) })
+            .collect::<Option<Vec<_>>>().ok_or(anyhow!("error trying to get paths"))?.iter().filter_map(|path_string| {
+            match insert_or_ignore_into(collections).values(path.eq(path_string)).get_result::<Collection>(&mut get_connection()) {
+                Err(Error::NotFound) => None,
+                result => Some(result),
+            }
+        }).map(|result| { Ok(collection_box.append_collection_remove(&result?)) }).collect::<Result<Vec<_>>>()?;
     }
     Ok(dialog.close())
 }
