@@ -14,17 +14,15 @@ use crate::Removable;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 
-async fn add_directory_to_collection(dialog: &FileChooserDialog, collection_box: &Box) -> Result<()> {
-    if dialog.run_future().await == ResponseType::Ok {
-        dialog.files().iter::<File>().map(|file| { Some(file.ok()?.path()?.to_str()?.to_owned()) })
-            .collect::<Option<Vec<_>>>().ok_or(anyhow!("error trying to get paths"))?.iter().filter_map(|path_string| {
-            match insert_or_ignore_into(collections).values(path.eq(path_string)).get_result::<Collection>(&mut get_connection()) {
-                Err(Error::NotFound) => None,
-                result => Some(result),
-            }
-        }).map(|result| { Ok(collection_box.append_collection_remove(&result?)) }).collect::<Result<Vec<_>>>()?;
-    }
-    Ok(dialog.close())
+fn add_directory_to_collection(dialog: &FileChooserDialog, collection_box: &Box) -> Result<()> {
+    dialog.files().iter::<File>().map(|file| { Some(file.ok()?.path()?.to_str()?.to_owned()) })
+        .collect::<Option<Vec<_>>>().ok_or(anyhow!("error trying to get paths"))?.iter().filter_map(|path_string| {
+        match insert_or_ignore_into(collections).values(path.eq(path_string)).get_result::<Collection>(&mut get_connection()) {
+            Err(Error::NotFound) => None,
+            result => Some(result),
+        }
+    }).map(|result| { Ok(collection_box.append_collection_remove(&result?)) }).collect::<Result<Vec<_>>>()?;
+    Ok(())
 }
 
 pub fn choose_file(collection_box: &Box) {
@@ -32,6 +30,9 @@ pub fn choose_file(collection_box: &Box) {
         .action(SelectFolder).select_multiple(true).build();
     dialog.add_buttons(&[("cancel", ResponseType::Cancel), ("choose", ResponseType::Ok)]);
     MainContext::default().spawn_local(clone!(@weak dialog, @weak collection_box => async move {
-        add_directory_to_collection(&dialog, &collection_box).await.expect("should be able to add directories to collection");
+        if dialog.run_future().await == ResponseType::Ok {
+            add_directory_to_collection(&dialog, &collection_box).expect("should be able to add directories to collection");
+        }
+        dialog.close();
     }));
 }
