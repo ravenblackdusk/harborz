@@ -4,7 +4,7 @@ mod models;
 mod db;
 
 use diesel::{delete, QueryDsl, RunQueryDsl};
-use dotenvy::dotenv;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use gtk::*;
 use prelude::*;
 use traits::{BoxExt, ButtonExt, GridExt};
@@ -17,7 +17,7 @@ use crate::models::Collection;
 use crate::schema::collections::dsl::collections;
 
 trait Removable {
-    fn append_collection_remove(&self, path: &Collection);
+    fn append_collection_remove(&self, collection: &Collection);
 }
 
 impl Removable for Box {
@@ -36,9 +36,11 @@ impl Removable for Box {
     }
 }
 
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+
 fn main() {
-    dotenv().ok();
     std_logger::Config::logfmt().init();
+    get_connection().run_pending_migrations(MIGRATIONS).expect("should run pending migrations");
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|application| {
         let collection_box = Box::builder().orientation(Vertical).build();

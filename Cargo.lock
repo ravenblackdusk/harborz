@@ -86,6 +86,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "diesel_migrations"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6036b3f0120c5961381b570ee20a02432d7e2d27ea60de9578799cf9156914ac"
+dependencies = [
+ "diesel",
+ "migrations_internals",
+ "migrations_macros",
+]
+
+[[package]]
 name = "diesel_table_macro_syntax"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -93,12 +104,6 @@ checksum = "fc5557efc453706fed5e4fa85006fe9817c224c3f480a34c7e5959fd700921c5"
 dependencies = [
  "syn 2.0.18",
 ]
-
-[[package]]
-name = "dotenvy"
-version = "0.15.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
 name = "erased-serde"
@@ -524,12 +529,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "migrations_internals"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f23f71580015254b020e856feac3df5878c2c7a8812297edd6c0a485ac9dada"
+dependencies = [
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "migrations_macros"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cce3325ac70e67bbab5bd837a31cae01f1a6db64e0e744a33cb03a543469ef08"
+dependencies = [
+ "migrations_internals",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "music-player"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "diesel",
- "dotenvy",
+ "diesel_migrations",
  "gtk4",
  "log",
  "once_cell",
@@ -722,6 +748,20 @@ name = "serde"
 version = "1.0.163"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2113ab51b87a539ae008b5c6c02dc020ffa39afd2d83cffcb3f4eb2722cebec2"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.163"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c805777e3930c8883389c602315a24224bcc738b63905ef87cd1420353ea93e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.18",
+]
 
 [[package]]
 name = "serde_fmt"
@@ -769,15 +809,15 @@ dependencies = [
 
 [[package]]
 name = "sval"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e6aa16ce8d9e472e21a528a52c875a76a49190f3968f2ec7e9b550ccc28b410"
+checksum = "e2faba619276044eec7cd160d87b15d9191fb9b9f7198440343d2144f760cf08"
 
 [[package]]
 name = "sval_buffer"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "905c4373621186ee9637464b0aaa026389ea9e7f841f2225f160a32ba5d5bac4"
+checksum = "a353d3cca10721384077c9643c3fafdd6ed2600e57933b8e45c0b580d97b25af"
 dependencies = [
  "sval",
  "sval_ref",
@@ -785,18 +825,18 @@ dependencies = [
 
 [[package]]
 name = "sval_dynamic"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad6b4988322c5f22859a6a7649fa1249aa3dd01514caf8ed57d83735f997bb8b"
+checksum = "ee5fc7349e9f6cb2ab950046818f66ad3f2d7209ccc5dced93da19292a30273a"
 dependencies = [
  "sval",
 ]
 
 [[package]]
 name = "sval_fmt"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d3ccd10346f925c2fbd97b75e8573b38e34431bfba04cc531cd23aad0fbabb8"
+checksum = "098fb51d5d6007bd2c3f0a23b79aa953d7c46bf943086ce51424c3187c40f9b1"
 dependencies = [
  "itoa",
  "ryu",
@@ -805,9 +845,9 @@ dependencies = [
 
 [[package]]
 name = "sval_json"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a12e1488defd6344e23243c17ea4a1b185c547968749e8a281373fde0bde2d5"
+checksum = "f01126a2783d767496f18f13af26ab2587881f6343368bb26dc62956a723d1c7"
 dependencies = [
  "itoa",
  "ryu",
@@ -816,18 +856,18 @@ dependencies = [
 
 [[package]]
 name = "sval_ref"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b797fc4b284dd0e45f7ec424479e604ea5be9bb191a1ef4e96c20c7685649938"
+checksum = "5854d9eaa7bd31840a850322591c59c5b547eb29c9a6ecee1989d6ef963312ce"
 dependencies = [
  "sval",
 ]
 
 [[package]]
 name = "sval_serde"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "810fa9a837e67a23e0efa7536250fc4d24043306cc1efd076f1943ba2fc2e62d"
+checksum = "8cdd25fc04c5e882787d62112591aa93efb5bdc2000b43164d29f08582bb85f7"
 dependencies = [
  "serde",
  "sval",
