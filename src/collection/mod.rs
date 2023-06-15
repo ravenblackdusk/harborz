@@ -23,11 +23,11 @@ pub fn frame() -> Frame {
     browse_button.connect_clicked(clone!(@weak collection_grid => move |_| {
         open_add_directories_to_collection_dialog(&collection_grid);
     }));
-    let collection_box = Box::builder().orientation(Vertical).spacing(4).build();
+    let collection_box = Box::builder().orientation(Vertical).spacing(4)
+        .margin_start(4).margin_end(4).margin_top(4).margin_bottom(4).build();
     collection_box.append(&collection_grid);
     collection_box.append(&browse_button);
-    Frame::builder().child(&collection_box).margin_start(4).margin_end(4).margin_top(4)
-        .margin_bottom(4).build()
+    Frame::builder().child(&collection_box).build()
 }
 
 #[derive(Queryable, Selectable, Debug)]
