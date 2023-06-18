@@ -1,3 +1,5 @@
+mod volume;
+
 use std::path::Path;
 use std::time::Duration;
 use gtk::*;
@@ -5,6 +7,7 @@ use glib::clone;
 use prelude::{BoxExt, ButtonExt, MediaStreamExt, RangeExt};
 use Orientation::Horizontal;
 use crate::common::gtk_box;
+use crate::controls::volume::volume_button;
 
 const PLAY_ICON: &'static str = "media-playback-start";
 
@@ -26,6 +29,8 @@ pub fn media_controls() -> Frame {
     gtk_box.append(&time);
     gtk_box.append(&scale);
     gtk_box.append(&duration_label);
+    gtk_box.append(&volume_button());
+    gtk_box.append(&VolumeButton::builder().build());
     scale.connect_change_value(clone!(@weak media_file => @default-return Inhibit(true), move |_, scroll_type, value| {
         if scroll_type == ScrollType::Jump {
             media_file.seek(value as i64);

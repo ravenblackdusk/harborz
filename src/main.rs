@@ -3,6 +3,7 @@ mod db;
 mod collection;
 mod controls;
 mod common;
+mod config;
 
 use diesel::migration;
 use migration::Result;
