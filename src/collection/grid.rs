@@ -14,7 +14,7 @@ pub(in crate::collection) trait CollectionGrid {
 
 impl CollectionGrid for Grid {
     fn add(&self, collection: &Collection, row: i32) {
-        let remove_button = Button::builder().label("-").build();
+        let remove_button = Button::builder().icon_name("list-remove").build();
         let id = collection.id;
         remove_button.connect_clicked(clone!(@weak self as borrowed_self => move |_| {
             delete(collections.find(id)).execute(&mut get_connection())

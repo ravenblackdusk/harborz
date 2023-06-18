@@ -14,6 +14,7 @@ use FileChooserAction::SelectFolder;
 use Orientation::Vertical;
 use crate::db::get_connection;
 use crate::collection::grid::CollectionGrid;
+use crate::common::gtk_box;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 
@@ -23,8 +24,7 @@ pub fn frame() -> Frame {
     browse_button.connect_clicked(clone!(@weak collection_grid => move |_| {
         open_add_directories_to_collection_dialog(&collection_grid);
     }));
-    let collection_box = Box::builder().orientation(Vertical).spacing(4)
-        .margin_start(4).margin_end(4).margin_top(4).margin_bottom(4).build();
+    let collection_box = gtk_box(Vertical);
     collection_box.append(&collection_grid);
     collection_box.append(&browse_button);
     Frame::builder().child(&collection_box).build()
