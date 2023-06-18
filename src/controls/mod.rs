@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::time::Duration;
-use Align::Center;
-use gtk::{Align, Button, Frame, Label, MediaFile, Orientation, ProgressBar};
-use gtk::prelude::{BoxExt, ButtonExt, MediaStreamExt};
+use gtk::*;
+use glib::clone;
+use prelude::{BoxExt, ButtonExt, MediaStreamExt, RangeExt};
 use Orientation::Horizontal;
 use crate::common::gtk_box;
 
@@ -17,20 +17,30 @@ pub fn media_controls() -> Frame {
     let media_file = MediaFile::for_filename(Path::new("/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3"));
     let play_pause = Button::builder().icon_name(PLAY_ICON).build();
     let time = Label::builder().label(format(0)).build();
-    let progress_bar = ProgressBar::builder().valign(Center).build();
-    let duration = Label::builder().build();
+    let scale = Scale::builder().width_request(100).build();
+    let duration_label = Label::builder().build();
     let gtk_box = gtk_box(Horizontal);
     gtk_box.append(&Button::builder().icon_name("media-skip-backward").build());
     gtk_box.append(&play_pause);
     gtk_box.append(&Button::builder().icon_name("media-skip-forward").build());
     gtk_box.append(&time);
-    gtk_box.append(&progress_bar);
-    gtk_box.append(&duration);
-    media_file.connect_duration_notify(move |media_file| { duration.set_label(&format(media_file.duration())) });
+    gtk_box.append(&scale);
+    gtk_box.append(&duration_label);
+    scale.connect_change_value(clone!(@weak media_file => @default-return Inhibit(true), move |_, scroll_type, value| {
+        if scroll_type == ScrollType::Jump {
+            media_file.seek(value as i64);
+        }
+        Inhibit(true)
+    }));
+    media_file.connect_duration_notify(clone!(@weak duration_label, @weak scale => move |media_file| {
+        let duration = media_file.duration();
+        duration_label.set_label(&format(duration));
+        scale.set_range(0.0, duration as f64);
+    }));
     media_file.connect_timestamp_notify(move |media_file| {
         let timestamp = media_file.timestamp();
         time.set_label(&format(timestamp));
-        progress_bar.set_fraction(timestamp as f64 / media_file.duration() as f64);
+        scale.set_value(timestamp as f64);
     });
     play_pause.connect_clicked(move |play_pause| {
         play_pause.set_icon_name(if media_file.is_playing() {
