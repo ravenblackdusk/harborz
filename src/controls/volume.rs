@@ -1,7 +1,4 @@
-use std::any::Any;
-use std::cmp::max;
-use std::ops::Add;
-use diesel::{AsChangeset, ExpressionMethods, RunQueryDsl, update};
+use diesel::{ExpressionMethods, RunQueryDsl, update};
 use gtk::*;
 use gtk::glib::clone;
 use gtk::prelude::{BoxExt, ButtonExt, RangeExt};

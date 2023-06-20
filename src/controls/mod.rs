@@ -30,7 +30,6 @@ pub fn media_controls() -> Frame {
     gtk_box.append(&scale);
     gtk_box.append(&duration_label);
     gtk_box.append(&volume_button());
-    gtk_box.append(&VolumeButton::builder().build());
     scale.connect_change_value(clone!(@weak media_file => @default-return Inhibit(true), move |_, scroll_type, value| {
         if scroll_type == ScrollType::Jump {
             media_file.seek(value as i64);

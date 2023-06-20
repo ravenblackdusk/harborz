@@ -1,0 +1,15 @@
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <RsCodeStyleSettings>
+      <option name="ALIGN_RET_TYPE" value="false" />
+      <option name="ALIGN_WHERE_BOUNDS" value="false" />
+    </RsCodeStyleSettings>
+    <codeStyleSettings language="Rust">
+      <option name="RIGHT_MARGIN" value="120" />
+      <option name="KEEP_BLANK_LINES_IN_DECLARATIONS" value="0" />
+      <option name="KEEP_BLANK_LINES_IN_CODE" value="0" />
+      <option name="ALIGN_MULTILINE_PARAMETERS" value="false" />
+      <option name="ALIGN_MULTILINE_PARAMETERS_IN_CALLS" value="false" />
+    </codeStyleSettings>
+  </code_scheme>
+</component>
