@@ -4,6 +4,7 @@ diesel::table! {
     collections (id) {
         id -> Integer,
         path -> Text,
+        row -> Integer,
     }
 }
 
