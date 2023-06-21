@@ -4,12 +4,25 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 use gtk::*;
+use gtk::prelude::WidgetExt;
 use prelude::{BoxExt, ButtonExt, MediaStreamExt, RangeExt};
 use Orientation::Horizontal;
 use crate::common::gtk_box;
 use crate::controls::volume::volume_button;
 
-const PLAY_ICON: &'static str = "media-playback-start";
+enum PlayPause {
+    Play,
+    Pause,
+}
+
+impl PlayPause {
+    fn icon_tooltip(&self) -> (&'static str, &'static str) {
+        match self {
+            PlayPause::Play => ("media-playback-start", "Play"),
+            PlayPause::Pause => ("media-playback-pause", "Pause"),
+        }
+    }
+}
 
 fn format(timestamp: i64) -> String {
     let seconds = Duration::from_micros(timestamp as u64).as_secs();
@@ -19,14 +32,15 @@ fn format(timestamp: i64) -> String {
 pub fn media_controls() -> Frame {
     let path = "/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3";
     let media_file = Rc::new(MediaFile::for_filename(Path::new(path)));
-    let play_pause = Button::builder().icon_name(PLAY_ICON).build();
+    let (icon, tooltip) = PlayPause::Play.icon_tooltip();
+    let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
     let time = Label::builder().label(format(0)).build();
     let scale = Rc::new(Scale::builder().width_request(100).build());
     let duration_label = Rc::new(Label::builder().build());
     let gtk_box = gtk_box(Horizontal);
-    gtk_box.append(&Button::builder().icon_name("media-skip-backward").build());
+    gtk_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
     gtk_box.append(&play_pause);
-    gtk_box.append(&Button::builder().icon_name("media-skip-forward").build());
+    gtk_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
     gtk_box.append(&time);
     gtk_box.append(&*scale);
     gtk_box.append(&*duration_label);
@@ -53,13 +67,15 @@ pub fn media_controls() -> Frame {
     play_pause.connect_clicked({
         let media_file = media_file.clone();
         move |play_pause| {
-            play_pause.set_icon_name(if media_file.is_playing() {
+            let (icon, tooltip) = if media_file.is_playing() {
                 media_file.pause();
-                PLAY_ICON
+                PlayPause::Play
             } else {
                 media_file.play();
-                "media-playback-pause"
-            });
+                PlayPause::Pause
+            }.icon_tooltip();
+            play_pause.set_icon_name(icon);
+            play_pause.set_tooltip_text(Some(tooltip));
         }
     });
     scale.connect_change_value(move |_, scroll_type, value| {

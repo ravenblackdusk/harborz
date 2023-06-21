@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use diesel::{ExpressionMethods, RunQueryDsl, update};
 use gtk::*;
-use gtk::prelude::{BoxExt, ButtonExt, RangeExt};
+use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use Orientation::Vertical;
 use crate::common::gtk_box;
 use crate::config::Config;
@@ -32,6 +32,13 @@ pub(in crate::controls) fn volume_button<F: Fn(f64) + 'static>(on_volume_change:
             i if i < 1.0 => "audio-volume-medium",
             _ => "audio-volume-high",
         });
+        let percentage: String;
+        cloned_button.set_tooltip_text(Some(if value <= 0.0 {
+            "Muted"
+        } else {
+            percentage = ((value * 100.0) as u8).to_string();
+            &(percentage)
+        }));
     };
     update_ui(get_volume());
     let update_volume = Rc::new(move |value: f64| {
