@@ -27,7 +27,7 @@ impl CollectionGrid for Grid {
                 update(collections.filter(row.gt(db_collection.row))).set(row.eq(row.add(-1))).execute(connection)?;
                 Ok(db_collection)
             }).expect("should be able to delete collection row");
-            self.clone().remove_row(db_collection.row);
+            self.remove_row(db_collection.row);
         });
     }
 
