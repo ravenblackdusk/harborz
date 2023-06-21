@@ -1,6 +1,6 @@
+use std::rc::Rc;
 use diesel::{ExpressionMethods, RunQueryDsl, update};
 use gtk::*;
-use gtk::glib::clone;
 use gtk::prelude::{BoxExt, ButtonExt, RangeExt};
 use Orientation::Vertical;
 use crate::common::gtk_box;
@@ -11,29 +11,39 @@ use crate::schema::config::volume;
 
 const VOLUME_STEP: f32 = 20.0;
 
-pub(in crate::controls) fn volume_button() -> MenuButton {
+pub(in crate::controls) fn volume_button() -> Rc<MenuButton> {
     let gtk_box = gtk_box(Vertical);
-    let button = MenuButton::builder().popover(&Popover::builder().child(&gtk_box).build()).build();
-    let scale = Scale::builder().orientation(Vertical).inverted(true).height_request(100).build();
+    let button = Rc::new(MenuButton::builder().popover(&Popover::builder().child(&gtk_box).build()).build());
+    let scale = Rc::new(Scale::builder().orientation(Vertical).inverted(true).height_request(100).build());
     let increase_volume = Button::builder().icon_name("list-add").build();
     let decrease_volume = Button::builder().icon_name("list-remove").build();
     gtk_box.append(&increase_volume);
-    gtk_box.append(&scale);
+    gtk_box.append(&*scale);
     gtk_box.append(&decrease_volume);
     scale.set_range(0.0, 100.0);
     update_scale_and_button(&scale, &button, get_volume().expect("should be able to get volume"));
-    scale.connect_change_value(clone!(@weak button => @default-return Inhibit(true), move |scale, scroll_type, value| {
-        if scroll_type == ScrollType::Jump {
-            update_volume(scale, &button, |_| { value as f32 });
+    scale.connect_change_value({
+        let button = button.clone();
+        move |scale, scroll_type, value| {
+            if scroll_type == ScrollType::Jump {
+                update_volume(scale, &button, |_| { value as f32 });
+            }
+            Inhibit(true)
         }
-        Inhibit(true)
-    }));
-    increase_volume.connect_clicked(clone!(@weak scale, @weak button => move |_| {
-        update_volume(&scale, &button, |current_volume| { 100.0_f32.min(current_volume + VOLUME_STEP) });
-    }));
-    decrease_volume.connect_clicked(clone!(@weak scale, @weak button => move |_| {
-        update_volume(&scale, &button, |current_volume| { 0.0_f32.max(current_volume - VOLUME_STEP) });
-    }));
+    });
+    increase_volume.connect_clicked({
+        let scale = scale.clone();
+        let button = button.clone();
+        move |_| {
+            update_volume(&scale, &button, |current_volume| { 100.0_f32.min(current_volume + VOLUME_STEP) });
+        }
+    });
+    decrease_volume.connect_clicked({
+        let button = button.clone();
+        move |_| {
+            update_volume(&scale, &button, |current_volume| { 0.0_f32.max(current_volume - VOLUME_STEP) });
+        }
+    });
     button
 }
 
