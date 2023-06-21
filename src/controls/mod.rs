@@ -17,7 +17,7 @@ fn format(timestamp: i64) -> String {
 }
 
 pub fn media_controls() -> Frame {
-    let path = "/mnt/8ff03919-86c0-43c8-acc9-4fdfab52b0f8/My Music/Agalloch/The Serpent & the Sphere/08. Plateau Of The Ages.mp3";
+    let path = "/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3";
     let media_file = Rc::new(MediaFile::for_filename(Path::new(path)));
     let play_pause = Button::builder().icon_name(PLAY_ICON).build();
     let time = Label::builder().label(format(0)).build();

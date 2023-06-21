@@ -21,53 +21,39 @@ pub(in crate::controls) fn volume_button() -> Rc<MenuButton> {
     gtk_box.append(&*scale);
     gtk_box.append(&decrease_volume);
     scale.set_range(0.0, 100.0);
-    update_scale_and_button(&scale, &button, get_volume().expect("should be able to get volume"));
-    scale.connect_change_value({
-        let button = button.clone();
-        move |scale, scroll_type, value| {
+    let cloned_scale = scale.clone();
+    let cloned_button = button.clone();
+    let update_scale_and_button = move |value: f32| {
+        scale.set_value(value as f64);
+        cloned_button.set_icon_name(match value {
+            i if i <= 0.0 => "audio-volume-muted",
+            i if i <= 50.0 => "audio-volume-low",
+            i if i < 100.0 => "audio-volume-medium",
+            _ => "audio-volume-high",
+        });
+    };
+    update_scale_and_button(get_volume());
+    let update_volume = Rc::new(move |value: f32| {
+        update(config).set(volume.eq(value)).execute(&mut get_connection()).unwrap();
+        update_scale_and_button(value)
+    });
+    cloned_scale.connect_change_value({
+        let update_volume = update_volume.clone();
+        move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
-                update_volume(scale, &button, |_| { value as f32 });
+                update_volume(value as f32);
             }
             Inhibit(true)
         }
     });
     increase_volume.connect_clicked({
-        let scale = scale.clone();
-        let button = button.clone();
-        move |_| {
-            update_volume(&scale, &button, |current_volume| { 100.0_f32.min(current_volume + VOLUME_STEP) });
-        }
+        let update_volume = update_volume.clone();
+        move |_| { update_volume(100.0_f32.min(get_volume() + VOLUME_STEP)); }
     });
-    decrease_volume.connect_clicked({
-        let button = button.clone();
-        move |_| {
-            update_volume(&scale, &button, |current_volume| { 0.0_f32.max(current_volume - VOLUME_STEP) });
-        }
-    });
+    decrease_volume.connect_clicked(move |_| { update_volume(0.0_f32.max(get_volume() - VOLUME_STEP)); });
     button
 }
 
-fn get_volume() -> anyhow::Result<f32> {
-    Ok(config.get_result::<Config>(&mut get_connection())?.volume)
-}
-
-fn update_scale_and_button(scale: &Scale, button: &MenuButton, value: f32) {
-    scale.set_value(value as f64);
-    button.set_icon_name(match value {
-        i if i <= 0.0 => "audio-volume-muted",
-        i if i <= 50.0 => "audio-volume-low",
-        i if i < 100.0 => "audio-volume-medium",
-        _ => "audio-volume-high",
-    });
-}
-
-fn update_volume_internal<F>(scale: &Scale, button: &MenuButton, update_volume_value: F) -> anyhow::Result<()>
-    where F: Fn(f32) -> f32 {
-    let updated_volume = update_volume_value(get_volume()?);
-    update(config).set(volume.eq(updated_volume)).execute(&mut get_connection())?;
-    Ok(update_scale_and_button(scale, button, updated_volume))
-}
-
-fn update_volume<F>(scale: &Scale, button: &MenuButton, update_volume_value: F) where F: Fn(f32) -> f32 {
-    update_volume_internal(scale, button, update_volume_value).expect("should be able to update volume");
+fn get_volume() -> f32 {
+    config.get_result::<Config>(&mut get_connection()).unwrap().volume
 }
