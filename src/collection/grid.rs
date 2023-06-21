@@ -18,7 +18,7 @@ pub(in crate::collection) trait CollectionGrid {
 impl CollectionGrid for Grid {
     fn add(self: Rc<Self>, collection: &Collection) {
         let remove_button = Button::builder().icon_name("list-remove").build();
-        self.attach(&Label::builder().label(&collection.path).build(), 0, collection.row, 1, 1);
+        self.attach(&Label::builder().label(&collection.path).hexpand(true).build(), 0, collection.row, 1, 1);
         self.attach(&remove_button, 1, collection.row, 1, 1);
         let id = collection.id;
         remove_button.connect_clicked(move |_| {

@@ -35,7 +35,7 @@ pub fn media_controls() -> Frame {
     let (icon, tooltip) = PlayPause::Play.icon_tooltip();
     let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
     let time = Label::builder().label(format(0)).build();
-    let scale = Rc::new(Scale::builder().width_request(100).build());
+    let scale = Rc::new(Scale::builder().hexpand(true).build());
     let duration_label = Rc::new(Label::builder().build());
     let gtk_box = gtk_box(Horizontal);
     gtk_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
