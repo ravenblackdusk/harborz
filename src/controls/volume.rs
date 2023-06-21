@@ -9,9 +9,9 @@ use crate::db::get_connection;
 use crate::schema::config::dsl::config;
 use crate::schema::config::volume;
 
-const VOLUME_STEP: f32 = 20.0;
+const VOLUME_STEP: f64 = 0.2;
 
-pub(in crate::controls) fn volume_button() -> Rc<MenuButton> {
+pub(in crate::controls) fn volume_button<F: Fn(f64) + 'static>(on_volume_change: F) -> Rc<MenuButton> {
     let gtk_box = gtk_box(Vertical);
     let button = Rc::new(MenuButton::builder().popover(&Popover::builder().child(&gtk_box).build()).build());
     let scale = Rc::new(Scale::builder().orientation(Vertical).inverted(true).height_request(100).build());
@@ -20,40 +20,41 @@ pub(in crate::controls) fn volume_button() -> Rc<MenuButton> {
     gtk_box.append(&increase_volume);
     gtk_box.append(&*scale);
     gtk_box.append(&decrease_volume);
-    scale.set_range(0.0, 100.0);
+    scale.set_range(0.0, 1.0);
     let cloned_scale = scale.clone();
     let cloned_button = button.clone();
-    let update_scale_and_button = move |value: f32| {
-        scale.set_value(value as f64);
+    let update_ui = move |value: f64| {
+        on_volume_change(value);
+        scale.set_value(value);
         cloned_button.set_icon_name(match value {
             i if i <= 0.0 => "audio-volume-muted",
-            i if i <= 50.0 => "audio-volume-low",
-            i if i < 100.0 => "audio-volume-medium",
+            i if i <= 0.5 => "audio-volume-low",
+            i if i < 1.0 => "audio-volume-medium",
             _ => "audio-volume-high",
         });
     };
-    update_scale_and_button(get_volume());
-    let update_volume = Rc::new(move |value: f32| {
-        update(config).set(volume.eq(value)).execute(&mut get_connection()).unwrap();
-        update_scale_and_button(value)
+    update_ui(get_volume());
+    let update_volume = Rc::new(move |value: f64| {
+        update(config).set(volume.eq(value as f32)).execute(&mut get_connection()).unwrap();
+        update_ui(value)
     });
     cloned_scale.connect_change_value({
         let update_volume = update_volume.clone();
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
-                update_volume(value as f32);
+                update_volume(value);
             }
             Inhibit(true)
         }
     });
     increase_volume.connect_clicked({
         let update_volume = update_volume.clone();
-        move |_| { update_volume(100.0_f32.min(get_volume() + VOLUME_STEP)); }
+        move |_| { update_volume((get_volume() + VOLUME_STEP).min(1.0)); }
     });
-    decrease_volume.connect_clicked(move |_| { update_volume(0.0_f32.max(get_volume() - VOLUME_STEP)); });
+    decrease_volume.connect_clicked(move |_| { update_volume((get_volume() - VOLUME_STEP).max(0.0)); });
     button
 }
 
-fn get_volume() -> f32 {
-    config.get_result::<Config>(&mut get_connection()).unwrap().volume
+fn get_volume() -> f64 {
+    config.get_result::<Config>(&mut get_connection()).unwrap().volume as f64
 }

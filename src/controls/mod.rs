@@ -30,7 +30,10 @@ pub fn media_controls() -> Frame {
     gtk_box.append(&time);
     gtk_box.append(&*scale);
     gtk_box.append(&*duration_label);
-    gtk_box.append(&*volume_button());
+    gtk_box.append(&*volume_button({
+        let media_file = media_file.clone();
+        move |volume| { media_file.set_volume(volume); }
+    }));
     media_file.connect_duration_notify({
         let scale = scale.clone();
         move |media_file| {
