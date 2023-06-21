@@ -23,21 +23,21 @@ fn main() -> Result<ExitCode> {
     get_connection().run_pending_migrations(MIGRATIONS)?;
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|application| {
-        let frame1 = Box::new(collection::frame());
-        let frame2 = Box::new(media_controls());
-        let bar = HeaderBar::builder().title_widget(&Label::builder().label("music player").build()).build();
-        let window = Rc::new(ApplicationWindow::builder().application(application).child(&*frame2).titlebar(&bar).build());
+        let collection_frame = collection::frame();
+        let media_controls = media_controls();
+        let bar = HeaderBar::builder().title_widget(&Label::builder().label("Music player").build()).build();
+        let window = Rc::new(ApplicationWindow::builder().application(application).child(&media_controls).titlebar(&bar).build());
         let collection_button = Button::builder().label("Collection").build();
         collection_button.connect_clicked({
             let window = window.clone();
-            move |_| { window.set_child(Some(&*frame1)); }
+            move |_| { window.set_child(Some(&collection_frame)); }
         });
         let menu = gtk_box(Vertical);
         menu.append(&collection_button);
         let home = Button::builder().icon_name("go-home").build();
         home.connect_clicked({
             let window = window.clone();
-            move |_| { window.set_child(Some(&*frame2)); }
+            move |_| { window.set_child(Some(&media_controls)); }
         });
         bar.pack_start(&home);
         bar.pack_end(&MenuButton::builder().icon_name("open-menu-symbolic")
