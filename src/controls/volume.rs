@@ -23,7 +23,7 @@ pub(in crate::controls) fn volume_button<F: Fn(f64) + 'static>(on_volume_change:
     scale.set_range(0.0, 1.0);
     let cloned_scale = scale.clone();
     let cloned_button = button.clone();
-    let update_ui = move |value: f64| {
+    let update_ui = move |value| {
         on_volume_change(value);
         scale.set_value(value);
         cloned_button.set_icon_name(match value {
@@ -36,12 +36,12 @@ pub(in crate::controls) fn volume_button<F: Fn(f64) + 'static>(on_volume_change:
         cloned_button.set_tooltip_text(Some(if value <= 0.0 {
             "Muted"
         } else {
-            percentage = ((value * 100.0) as u8).to_string();
-            &(percentage)
+            percentage = format!("{}%", (value * 100.0) as u8);
+            &percentage
         }));
     };
     update_ui(get_volume());
-    let update_volume = Rc::new(move |value: f64| {
+    let update_volume = Rc::new(move |value| {
         update(config).set(volume.eq(value as f32)).execute(&mut get_connection()).unwrap();
         update_ui(value)
     });
