@@ -26,14 +26,14 @@ impl CollectionGrid for Grid {
                 let db_collection = delete(collections.find(id)).get_result::<Collection>(connection)?;
                 update(collections.filter(row.gt(db_collection.row))).set(row.eq(row.add(-1))).execute(connection)?;
                 Ok(db_collection)
-            }).expect("should be able to delete collection row");
+            }).unwrap();
             self.remove_row(db_collection.row);
         });
     }
 
     fn new() -> Rc<Self> {
         let collection_grid = Rc::new(Grid::builder().row_spacing(4).column_spacing(4).build());
-        for collection in collections.load::<Collection>(&mut get_connection()).expect("should be able to get collections") {
+        for collection in collections.load::<Collection>(&mut get_connection()).unwrap() {
             collection_grid.clone().add(&collection);
         }
         collection_grid

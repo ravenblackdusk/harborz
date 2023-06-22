@@ -5,12 +5,12 @@ use once_cell::sync::Lazy;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations};
 
 static CONNECTION: Lazy<Pool<ConnectionManager<SqliteConnection>>> = Lazy::new(|| {
-    Pool::builder().test_on_check_out(true).build(ConnectionManager::<SqliteConnection>::new("music-player.sqlite"))
-        .expect("Could not build connection pool")
+    Pool::builder().test_on_check_out(true)
+        .build(ConnectionManager::<SqliteConnection>::new("music-player.sqlite")).unwrap()
 });
 
 pub fn get_connection() -> PooledConnection<ConnectionManager<SqliteConnection>> {
-    CONNECTION.deref().get().expect("should be able to get connection from pool")
+    CONNECTION.deref().get().unwrap()
 }
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
