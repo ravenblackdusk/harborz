@@ -2,6 +2,7 @@
 
 mod grid;
 mod model;
+mod song;
 
 use std::rc::Rc;
 use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl};
@@ -17,6 +18,7 @@ use gtk::Orientation::Vertical;
 use crate::db::get_connection;
 use crate::collection::grid::CollectionGrid;
 use crate::collection::model::Collection;
+use crate::collection::song::import_songs;
 use crate::common::gtk_box;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::{path, row};
@@ -34,20 +36,30 @@ pub fn frame() -> Frame {
         MainContext::default().spawn_local({
             let collection_grid = collection_grid.clone();
             async move {
-                if dialog.run_future().await == ResponseType::Ok {
-                    dialog.files().iter::<File>().map(|file| { Some(file.ok()?.path()?.to_str()?.to_owned()) })
+                let files = if dialog.run_future().await == ResponseType::Ok {
+                    Some(dialog.files())
+                } else {
+                    None
+                };
+                dialog.close();
+                if let Some(files) = files {
+                    files.iter::<File>().map(|file| { Some(file.unwrap().path()?.to_str()?.to_owned()) })
                         .collect::<Option<Vec<_>>>().unwrap().iter().filter_map(|path_string| {
                         match get_connection().transaction(|connection| {
                             let max_row = collections.select(max(row)).get_result::<Option<i32>>(connection)?;
-                            insert_or_ignore_into(collections).values((path.eq(path_string), row.eq(max_row.unwrap_or(0) + 1)))
+                            insert_or_ignore_into(collections)
+                                .values((path.eq(path_string), row.eq(max_row.unwrap_or(0) + 1)))
                                 .get_result::<Collection>(connection)
                         }) {
                             Err(Error::NotFound) => None,
-                            result => Some(result),
+                            result => Some(result.unwrap()),
                         }
-                    }).for_each(|result| { collection_grid.clone().add(&result.unwrap()); });
+                    }).map(|collection| {
+                        collection_grid.clone().add(&collection);
+                        collection
+                    }).collect::<Vec<Collection>>()
                 }
-                dialog.close();
+                import_songs(files);
             }
         });
     });

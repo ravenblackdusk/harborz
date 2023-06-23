@@ -6,5 +6,6 @@ create table collections
     path TEXT    not null
 );
 
+-- noinspection SpellCheckingInspection @ index/"collections_path_uindex"
 create unique index collections_path_uindex
     on collections (path);
