@@ -13,3 +13,6 @@ create table songs
 -- noinspection SpellCheckingInspection @ index/"songs_path_uindex"
 create unique index songs_path_uindex
     on songs (path);
+
+alter table collections
+    add modified sqlite_uint64;

@@ -5,6 +5,7 @@ diesel::table! {
         id -> Integer,
         path -> Text,
         row -> Integer,
+        modified -> Nullable<BigInt>,
     }
 }
 

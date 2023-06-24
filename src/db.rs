@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use diesel::connection::SimpleConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::SqliteConnection;
 use once_cell::sync::Lazy;
@@ -10,7 +11,9 @@ static CONNECTION: Lazy<Pool<ConnectionManager<SqliteConnection>>> = Lazy::new(|
 });
 
 pub fn get_connection() -> PooledConnection<ConnectionManager<SqliteConnection>> {
-    CONNECTION.deref().get().unwrap()
+    let mut connection = CONNECTION.deref().get().unwrap();
+    connection.batch_execute("PRAGMA foreign_keys = ON").unwrap();
+    connection
 }
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");

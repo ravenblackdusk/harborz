@@ -5,7 +5,8 @@ mod model;
 mod song;
 
 use std::rc::Rc;
-use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl};
+use std::time::UNIX_EPOCH;
+use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
 use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::result::Error;
@@ -21,7 +22,7 @@ use crate::collection::model::Collection;
 use crate::collection::song::import_songs;
 use crate::common::gtk_box;
 use crate::schema::collections::dsl::collections;
-use crate::schema::collections::{path, row};
+use crate::schema::collections::{modified, path, row};
 
 pub fn frame() -> Frame {
     let collection_grid: Rc<Grid> = CollectionGrid::new();
@@ -43,23 +44,28 @@ pub fn frame() -> Frame {
                 };
                 dialog.close();
                 if let Some(files) = files {
-                    files.iter::<File>().map(|file| { Some(file.unwrap().path()?.to_str()?.to_owned()) })
-                        .collect::<Option<Vec<_>>>().unwrap().iter().filter_map(|path_string| {
-                        match get_connection().transaction(|connection| {
+                    for path_string in files.iter::<File>().map(|file| { Some(file.unwrap().path()?.to_str()?.to_owned()) })
+                        .collect::<Option<Vec<_>>>().unwrap() {
+                        get_connection().transaction(|connection| {
                             let max_row = collections.select(max(row)).get_result::<Option<i32>>(connection)?;
-                            insert_or_ignore_into(collections)
+                            match insert_or_ignore_into(collections)
                                 .values((path.eq(path_string), row.eq(max_row.unwrap_or(0) + 1)))
-                                .get_result::<Collection>(connection)
-                        }) {
-                            Err(Error::NotFound) => None,
-                            result => Some(result.unwrap()),
-                        }
-                    }).map(|collection| {
-                        collection_grid.clone().add(&collection);
-                        collection
-                    }).collect::<Vec<Collection>>()
+                                .get_result::<Collection>(connection) {
+                                Err(Error::NotFound) => {}
+                                Ok(collection) => {
+                                    if let Some(system_time) = import_songs(&collection, connection) {
+                                        update(collections.find(collection.id))
+                                            .set(modified.eq(system_time.duration_since(UNIX_EPOCH)?.as_nanos() as i64))
+                                            .execute(connection)?;
+                                    }
+                                    collection_grid.clone().add(&collection);
+                                }
+                                result => { result?; },
+                            }
+                            anyhow::Ok(())
+                        }).unwrap();
+                    }
                 }
-                import_songs(files);
             }
         });
     });
