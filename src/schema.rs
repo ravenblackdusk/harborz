@@ -20,6 +20,13 @@ diesel::table! {
         id -> Integer,
         path -> Text,
         collection_id -> Integer,
+        title -> Text,
+        artist -> Text,
+        album -> Text,
+        datetime -> Nullable<BigInt>,
+        genre -> Text,
+        track_number -> Integer,
+        album_artist -> Nullable<Text>,
     }
 }
 
