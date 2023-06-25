@@ -24,11 +24,15 @@ struct Song {
 
 const ARTIST: &'static str = "artist";
 
+fn label(string: Option<String>) -> Label {
+    Label::builder().label(string.unwrap_or("None".to_string())).build()
+}
+
 pub fn home() -> Rc<Frame> {
     let artists = ListBox::builder().selection_mode(SelectionMode::None).build();
     let frame = Rc::new(Frame::builder().child(&artists).build());
     for artist_string in songs.select(artist).group_by(artist).get_results::<Option<String>>(&mut get_connection()).unwrap() {
-        let label = Label::builder().label(artist_string.clone().unwrap_or("None".to_string())).build();
+        let label = label(artist_string.clone());
         unsafe { label.set_data(ARTIST, artist_string); }
         artists.append(&label);
     }
@@ -40,7 +44,7 @@ pub fn home() -> Rc<Frame> {
             let albums = ListBox::builder().selection_mode(SelectionMode::None).build();
             for album_string in songs.filter(artist.eq(artist_string)).select(album).group_by(album)
                 .get_results::<Option<String>>(&mut get_connection()).unwrap() {
-                albums.append(&Label::builder().label(album_string.unwrap_or("None".to_string())).build())
+                albums.append(&label(album_string));
             }
             frame.set_child(Some(&albums));
         }
