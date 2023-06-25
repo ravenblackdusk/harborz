@@ -13,3 +13,4 @@ diesel = { version = "2.1.0", features = ["r2d2", "sqlite", "returning_clauses_f
 diesel_migrations = "2.1.0"
 walkdir = "2.3.3"
 gstreamer = "0.20.6"
+gstreamer-pbutils = "0.20.6"

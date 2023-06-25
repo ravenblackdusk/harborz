@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use diesel::connection::SimpleConnection;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::SqliteConnection;
@@ -11,7 +10,7 @@ static CONNECTION: Lazy<Pool<ConnectionManager<SqliteConnection>>> = Lazy::new(|
 });
 
 pub fn get_connection() -> PooledConnection<ConnectionManager<SqliteConnection>> {
-    let mut connection = CONNECTION.deref().get().unwrap();
+    let mut connection = CONNECTION.get().unwrap();
     connection.batch_execute("PRAGMA foreign_keys = ON").unwrap();
     connection
 }

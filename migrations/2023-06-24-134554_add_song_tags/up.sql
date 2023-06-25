@@ -1,22 +1,22 @@
 -- noinspection SqlAddNotNullColumnForFile
 
 alter table songs
-    add title TEXT not null;
+    add title TEXT;
 
 alter table songs
-    add artist TEXT not null;
+    add artist TEXT;
 
 alter table songs
-    add album TEXT not null;
+    add album TEXT;
 
 alter table songs
     add datetime sqlite_uint64;
 
 alter table songs
-    add genre TEXT not null;
+    add genre TEXT;
 
 alter table songs
-    add track_number integer not null;
+    add track_number integer;
 
 alter table songs
     add album_artist TEXT;
