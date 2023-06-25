@@ -36,7 +36,7 @@ fn main() -> Result<ExitCode> {
         let menu_button = Rc::new(MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build());
         let main_box = Rc::new(gtk_box(Vertical));
-        main_box.append(&home());
+        main_box.append(&*home());
         main_box.append(&media_controls);
         collection_button.connect_clicked({
             let main_box = main_box.clone();
@@ -50,7 +50,7 @@ fn main() -> Result<ExitCode> {
         let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
         home_button.connect_clicked({
             let main_box = main_box.clone();
-            move |_| { update_body(&main_box, &home(), &title, "Music player"); }
+            move |_| { update_body(&main_box, &*home(), &title, "Music player"); }
         });
         bar.pack_start(&home_button);
         bar.pack_end(&*menu_button);
