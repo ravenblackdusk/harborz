@@ -1,6 +1,4 @@
-use diesel::{Queryable, Selectable};
-
-#[derive(Queryable, Selectable, Debug)]
+#[derive(diesel::Queryable, diesel::Selectable, Debug)]
 #[diesel(table_name = crate::schema::collections)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub(in crate::collection) struct Collection {

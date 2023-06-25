@@ -4,6 +4,7 @@ mod collection;
 mod controls;
 mod common;
 mod config;
+mod home;
 
 use std::rc::Rc;
 use diesel::migration;
@@ -17,6 +18,7 @@ use db::MIGRATIONS;
 use crate::common::gtk_box;
 use crate::controls::media_controls;
 use crate::db::get_connection;
+use crate::home::home;
 
 fn main() -> Result<ExitCode> {
     std_logger::Config::logfmt().init();
@@ -28,34 +30,37 @@ fn main() -> Result<ExitCode> {
         let media_controls = media_controls();
         let title = Rc::new(Label::builder().label("Music player").build());
         let bar = HeaderBar::builder().title_widget(&*title).build();
-        let window = Rc::new(ApplicationWindow::builder().application(application).child(&media_controls).titlebar(&bar).build());
         let collection_button = Button::builder().label("Collection").build();
         let menu = gtk_box(Vertical);
         menu.append(&collection_button);
         let menu_button = Rc::new(MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build());
+        let main_box = Rc::new(gtk_box(Vertical));
+        main_box.append(&home());
+        main_box.append(&media_controls);
         collection_button.connect_clicked({
-            let window = window.clone();
+            let main_box = main_box.clone();
             let title = title.clone();
             let menu_button = menu_button.clone();
             move |_| {
-                update_window(&window, &collection_frame, &title, "Collection");
+                update_body(&main_box, &collection_frame, &title, "Collection");
                 menu_button.popdown();
             }
         });
-        let home = Button::builder().icon_name("go-home").tooltip_text("Home").build();
-        home.connect_clicked({
-            let window = window.clone();
-            move |_| { update_window(&window, &media_controls, &title, "Music player"); }
+        let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
+        home_button.connect_clicked({
+            let main_box = main_box.clone();
+            move |_| { update_body(&main_box, &home(), &title, "Music player"); }
         });
-        bar.pack_start(&home);
+        bar.pack_start(&home_button);
         bar.pack_end(&*menu_button);
-        window.present();
+        ApplicationWindow::builder().application(application).child(&*main_box).titlebar(&bar).build().present();
     });
     Ok(application.run())
 }
 
-fn update_window(window: &Rc<ApplicationWindow>, widget: &impl IsA<Widget>, title: &Rc<Label>, label: &str) {
-    window.set_child(Some(widget));
+fn update_body(gtk_box: &Rc<Box>, body: &impl IsA<Widget>, title: &Rc<Label>, label: &str) {
+    gtk_box.remove(&gtk_box.first_child().unwrap());
+    gtk_box.prepend(body);
     title.set_label(label);
 }
