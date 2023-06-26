@@ -17,8 +17,8 @@ fn list_box<T: 'static, S: Fn(&T) -> &str, F: Fn(&T) + 'static>(frame: Rc<Frame>
         unsafe { label.set_data(ID, row_item); }
         list_box.append(&label);
     }
-    list_box.connect_row_activated(move |_, list_box_row| unsafe {
-        let item = gtk::prelude::ListBoxRowExt::child(list_box_row).unwrap().data::<T>(ID).unwrap().as_ref();
+    list_box.connect_row_activated(move |_, list_box_row| {
+        let item = unsafe { gtk::prelude::ListBoxRowExt::child(list_box_row).unwrap().data::<T>(ID).unwrap().as_ref() };
         on_row_activated(item);
     });
     frame.set_child(Some(&list_box));
@@ -41,9 +41,7 @@ pub fn home() -> Rc<Frame> {
                     move |album_string| {
                         list_box(frame.clone(), songs.filter(artist.eq(&artist_string).and(album.eq(album_string)))
                             .get_results::<Song>(&mut get_connection()).unwrap(),
-                            |song_item| { song_item.title.as_deref().unwrap_or(song_item.path.as_str()) }, move |song_item| {
-
-                            });
+                            |song_item| { song_item.title.as_deref().unwrap_or(song_item.path.as_str()) }, move |song_item| {});
                     }
                 });
             }
