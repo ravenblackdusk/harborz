@@ -12,11 +12,7 @@ pub(in crate::collection) fn open_dialog<F: Fn(Option<ListModel>) + 'static>(do_
     dialog.add_buttons(&[("Cancel", ResponseType::Cancel), ("Choose", ResponseType::Ok)]);
     MainContext::default().spawn_local({
         async move {
-            let files = if dialog.run_future().await == ResponseType::Ok {
-                Some(dialog.files())
-            } else {
-                None
-            };
+            let files = (dialog.run_future().await == ResponseType::Ok).then_some(dialog.files());
             dialog.close();
             do_with_files(files);
         }
