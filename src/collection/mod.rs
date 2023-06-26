@@ -1,8 +1,7 @@
-#![allow(deprecated)]
-
 mod grid;
 pub mod model;
 pub mod song;
+mod dialog;
 
 use std::rc::Rc;
 use std::time::UNIX_EPOCH;
@@ -10,12 +9,11 @@ use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, up
 use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::result::Error;
-use gtk::{Button, FileChooserDialog, Frame, Grid, ResponseType};
+use gtk::{Button, Frame, Grid};
 use gtk::prelude::*;
 use gtk::gio::File;
-use gtk::glib::MainContext;
-use gtk::FileChooserAction::SelectFolder;
 use gtk::Orientation::Vertical;
+use crate::collection::dialog::open_dialog;
 use crate::db::get_connection;
 use crate::collection::grid::CollectionGrid;
 use crate::collection::model::Collection;
@@ -31,18 +29,9 @@ pub fn frame() -> Frame {
     collection_box.append(&*collection_grid);
     collection_box.append(&browse_button);
     browse_button.connect_clicked(move |_| {
-        let dialog = FileChooserDialog::builder().title("choose collection directories")
-            .action(SelectFolder).select_multiple(true).build();
-        dialog.add_buttons(&[("cancel", ResponseType::Cancel), ("choose", ResponseType::Ok)]);
-        MainContext::default().spawn_local({
+        open_dialog({
             let collection_grid = collection_grid.clone();
-            async move {
-                let files = if dialog.run_future().await == ResponseType::Ok {
-                    Some(dialog.files())
-                } else {
-                    None
-                };
-                dialog.close();
+            move |files| {
                 if let Some(files) = files {
                     for path_string in files.iter::<File>().map(|file| { Some(file.unwrap().path()?.to_str()?.to_owned()) })
                         .collect::<Option<Vec<_>>>().unwrap() {
@@ -60,7 +49,7 @@ pub fn frame() -> Frame {
                                     }
                                     collection_grid.clone().add(&collection);
                                 }
-                                result => { result?; },
+                                result => { result?; }
                             }
                             anyhow::Ok(())
                         }).unwrap();
