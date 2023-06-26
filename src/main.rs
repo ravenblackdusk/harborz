@@ -17,7 +17,7 @@ use prelude::*;
 use glib::ExitCode;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
-use home::set_home;
+use crate::collection::collection_box;
 use crate::common::{box_builder, gtk_box};
 use crate::controls::media_controls;
 use crate::db::get_connection;
@@ -28,7 +28,7 @@ fn main() -> Result<ExitCode> {
     get_connection().run_pending_migrations(MIGRATIONS)?;
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|application| {
-        let collection_frame = collection::frame();
+        let collection_box = collection_box();
         let media_file = Rc::new(MediaFile::for_filename(Path::new("/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3")));
         let media_controls = media_controls(media_file.clone());
         let title = Rc::new(Label::builder().label("Music player").build());
@@ -40,7 +40,7 @@ fn main() -> Result<ExitCode> {
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build());
         let main_box = box_builder().orientation(Vertical).valign(Fill).build();
         let scrolled_window = Rc::new(ScrolledWindow::builder().vexpand(true).build());
-        set_home(scrolled_window.clone(), media_file.clone());
+        home::set_body(scrolled_window.clone(), media_file.clone());
         main_box.append(&*scrolled_window);
         main_box.append(&media_controls);
         collection_button.connect_clicked({
@@ -48,7 +48,7 @@ fn main() -> Result<ExitCode> {
             let title = title.clone();
             let menu_button = menu_button.clone();
             move |_| {
-                scrolled_window.set_child(Some(&collection_frame));
+                scrolled_window.set_child(Some(&collection_box));
                 title.set_label("Collection");
                 menu_button.popdown();
             }
@@ -57,7 +57,7 @@ fn main() -> Result<ExitCode> {
         home_button.connect_clicked({
             let scrolled_window = scrolled_window.clone();
             move |_| {
-                set_home(scrolled_window.clone(), media_file.clone());
+                home::set_body(scrolled_window.clone(), media_file.clone());
                 title.set_label("Music player");
             }
         });

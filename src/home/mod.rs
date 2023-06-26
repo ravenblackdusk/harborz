@@ -31,7 +31,7 @@ fn or_none(string: &Option<String>) -> &str {
     string.as_deref().unwrap_or("None")
 }
 
-pub fn set_home(scrolled_window: Rc<ScrolledWindow>, media_file: Rc<MediaFile>) {
+pub fn set_body(scrolled_window: Rc<ScrolledWindow>, media_file: Rc<MediaFile>) {
     list_box(scrolled_window.clone(),
         songs.select(artist).group_by(artist).get_results::<Option<String>>(&mut get_connection()).unwrap(), or_none, {
             let scrolled_window = scrolled_window.clone();

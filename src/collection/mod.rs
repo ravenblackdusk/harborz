@@ -9,7 +9,7 @@ use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, up
 use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::result::Error;
-use gtk::{Button, Frame, Grid};
+use gtk::{Button, Grid};
 use gtk::prelude::*;
 use gtk::gio::File;
 use gtk::Orientation::Vertical;
@@ -22,7 +22,7 @@ use crate::common::gtk_box;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::{modified, path, row};
 
-pub fn frame() -> Frame {
+pub fn collection_box() -> gtk::Box {
     let collection_grid: Rc<Grid> = CollectionGrid::new();
     let browse_button = Button::builder().label("browse").build();
     let collection_box = gtk_box(Vertical);
@@ -58,5 +58,5 @@ pub fn frame() -> Frame {
             }
         });
     });
-    Frame::builder().child(&collection_box).build()
+    collection_box
 }
