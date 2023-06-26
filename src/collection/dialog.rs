@@ -10,11 +10,9 @@ pub(in crate::collection) fn open_dialog<F: Fn(Option<ListModel>) + 'static>(do_
     let dialog = FileChooserDialog::builder().title("Choose collection directories").use_header_bar(1)
         .action(SelectFolder).select_multiple(true).build();
     dialog.add_buttons(&[("Cancel", ResponseType::Cancel), ("Choose", ResponseType::Ok)]);
-    MainContext::default().spawn_local({
-        async move {
-            let files = (dialog.run_future().await == ResponseType::Ok).then_some(dialog.files());
-            dialog.close();
-            do_with_files(files);
-        }
+    MainContext::default().spawn_local(async move {
+        let files = (dialog.run_future().await == ResponseType::Ok).then_some(dialog.files());
+        dialog.close();
+        do_with_files(files);
     });
 }
