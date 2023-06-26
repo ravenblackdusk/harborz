@@ -8,6 +8,7 @@ mod home;
 
 use std::path::Path;
 use std::rc::Rc;
+use Align::Fill;
 use diesel::migration;
 use migration::Result;
 use diesel_migrations::MigrationHarness;
@@ -16,7 +17,8 @@ use prelude::*;
 use glib::ExitCode;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
-use crate::common::gtk_box;
+use home::set_home;
+use crate::common::{box_builder, gtk_box};
 use crate::controls::media_controls;
 use crate::db::get_connection;
 
@@ -36,32 +38,32 @@ fn main() -> Result<ExitCode> {
         menu.append(&collection_button);
         let menu_button = Rc::new(MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build());
-        let main_box = Rc::new(gtk_box(Vertical));
-        main_box.append(&*home::frame(media_file.clone()));
+        let main_box = box_builder().orientation(Vertical).valign(Fill).build();
+        let scrolled_window = Rc::new(ScrolledWindow::builder().vexpand(true).build());
+        set_home(scrolled_window.clone(), media_file.clone());
+        main_box.append(&*scrolled_window);
         main_box.append(&media_controls);
         collection_button.connect_clicked({
-            let main_box = main_box.clone();
+            let scrolled_window = scrolled_window.clone();
             let title = title.clone();
             let menu_button = menu_button.clone();
             move |_| {
-                update_body(&main_box, &collection_frame, &title, "Collection");
+                scrolled_window.set_child(Some(&collection_frame));
+                title.set_label("Collection");
                 menu_button.popdown();
             }
         });
         let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
         home_button.connect_clicked({
-            let main_box = main_box.clone();
-            move |_| { update_body(&main_box, &*home::frame(media_file.clone()), &title, "Music player"); }
+            let scrolled_window = scrolled_window.clone();
+            move |_| {
+                set_home(scrolled_window.clone(), media_file.clone());
+                title.set_label("Music player");
+            }
         });
         bar.pack_start(&home_button);
         bar.pack_end(&*menu_button);
-        ApplicationWindow::builder().application(application).child(&*main_box).titlebar(&bar).build().present();
+        ApplicationWindow::builder().application(application).child(&main_box).titlebar(&bar).build().present();
     });
     Ok(application.run())
-}
-
-fn update_body(gtk_box: &Rc<Box>, body: &impl IsA<Widget>, title: &Rc<Label>, label: &str) {
-    gtk_box.remove(&gtk_box.first_child().unwrap());
-    gtk_box.prepend(body);
-    title.set_label(label);
 }
