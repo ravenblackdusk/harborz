@@ -11,6 +11,22 @@ use crate::collection::model::Collection;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::*;
 
+#[derive(diesel::Queryable, diesel::Selectable, Debug)]
+#[diesel(table_name = crate::schema::songs)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+struct Song {
+    pub id: i32,
+    pub path: String,
+    pub collection_id: i32,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub datetime: Option<i64>,
+    pub genre: Option<String>,
+    pub track_number: Option<i32>,
+    pub album_artist: Option<String>,
+}
+
 static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(1)).unwrap() });
 
 pub(in crate::collection) fn import_songs(collection: &Collection,
