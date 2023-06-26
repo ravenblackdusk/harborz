@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 
 mod grid;
-mod model;
+pub mod model;
 pub mod song;
 
 use std::rc::Rc;

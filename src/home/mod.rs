@@ -1,9 +1,12 @@
+use std::path::Path;
 use std::rc::Rc;
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
-use gtk::{Frame, Label, ListBox, SelectionMode};
-use gtk::prelude::{FrameExt, ObjectExt};
+use gtk::{Frame, Label, ListBox, MediaFile, SelectionMode};
+use gtk::prelude::{FrameExt, MediaFileExt, MediaStreamExt, ObjectExt};
+use crate::collection::model::Collection;
 use crate::collection::song::Song;
 use crate::db::get_connection;
+use crate::schema::collections::dsl::collections;
 use crate::schema::songs::{album, artist};
 use crate::schema::songs::dsl::songs;
 
@@ -28,7 +31,7 @@ fn or_none(string: &Option<String>) -> &str {
     string.as_deref().unwrap_or("None")
 }
 
-pub fn home() -> Rc<Frame> {
+pub fn frame(media_file: Rc<MediaFile>) -> Rc<Frame> {
     let frame = Rc::new(Frame::builder().build());
     list_box(frame.clone(),
         songs.select(artist).group_by(artist).get_results::<Option<String>>(&mut get_connection()).unwrap(), or_none, {
@@ -38,13 +41,25 @@ pub fn home() -> Rc<Frame> {
                     .get_results::<Option<String>>(&mut get_connection()).unwrap(), or_none, {
                     let artist_string = artist_string.to_owned();
                     let frame = frame.clone();
+                    let media_file = media_file.clone();
                     move |album_string| {
-                        list_box(frame.clone(), songs.filter(artist.eq(&artist_string).and(album.eq(album_string)))
-                            .get_results::<Song>(&mut get_connection()).unwrap(),
-                            |song_item| { song_item.title.as_deref().unwrap_or(song_item.path.as_str()) }, move |song_item| {});
+                        list_box(frame.clone(),
+                            songs.inner_join(collections)
+                                .filter(artist.eq(&artist_string).and(album.eq(album_string)))
+                                .get_results::<(Song, Collection)>(&mut get_connection()).unwrap(),
+                            |(song, _)| { song.title.as_deref().unwrap_or(song.path.as_str()) }, {
+                                let media_file = media_file.clone();
+                                move |(song, collection)| {
+                                    media_file.pause();
+                                    media_file.set_filename(Some(Path::new(collection.path.as_str()).join(Path::new(song.path.as_str()))));
+                                    media_file.play();
+                                }
+                            },
+                        );
                     }
                 });
             }
-        });
+        },
+    );
     frame
 }

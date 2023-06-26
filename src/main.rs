@@ -6,6 +6,7 @@ mod common;
 mod config;
 mod home;
 
+use std::path::Path;
 use std::rc::Rc;
 use diesel::migration;
 use migration::Result;
@@ -18,7 +19,6 @@ use db::MIGRATIONS;
 use crate::common::gtk_box;
 use crate::controls::media_controls;
 use crate::db::get_connection;
-use crate::home::home;
 
 fn main() -> Result<ExitCode> {
     std_logger::Config::logfmt().init();
@@ -27,7 +27,8 @@ fn main() -> Result<ExitCode> {
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|application| {
         let collection_frame = collection::frame();
-        let media_controls = media_controls();
+        let media_file = Rc::new(MediaFile::for_filename(Path::new("/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3")));
+        let media_controls = media_controls(media_file.clone());
         let title = Rc::new(Label::builder().label("Music player").build());
         let bar = HeaderBar::builder().title_widget(&*title).build();
         let collection_button = Button::builder().label("Collection").build();
@@ -36,7 +37,7 @@ fn main() -> Result<ExitCode> {
         let menu_button = Rc::new(MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build());
         let main_box = Rc::new(gtk_box(Vertical));
-        main_box.append(&*home());
+        main_box.append(&*home::frame(media_file.clone()));
         main_box.append(&media_controls);
         collection_button.connect_clicked({
             let main_box = main_box.clone();
@@ -50,7 +51,7 @@ fn main() -> Result<ExitCode> {
         let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
         home_button.connect_clicked({
             let main_box = main_box.clone();
-            move |_| { update_body(&main_box, &*home(), &title, "Music player"); }
+            move |_| { update_body(&main_box, &*home::frame(media_file.clone()), &title, "Music player"); }
         });
         bar.pack_start(&home_button);
         bar.pack_end(&*menu_button);

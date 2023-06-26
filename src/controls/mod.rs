@@ -1,6 +1,5 @@
 mod volume;
 
-use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 use gtk::*;
@@ -29,9 +28,7 @@ fn format(timestamp: i64) -> String {
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
-pub fn media_controls() -> Frame {
-    let path = "/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3";
-    let media_file = Rc::new(MediaFile::for_filename(Path::new(path)));
+pub fn media_controls(media_file: Rc<MediaFile>) -> Frame {
     let (icon, tooltip) = PlayPause::Play.icon_tooltip();
     let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
     let time = Label::builder().label(format(0)).build();
