@@ -2,7 +2,7 @@
 
 mod grid;
 mod model;
-mod song;
+pub mod song;
 
 use std::rc::Rc;
 use std::time::UNIX_EPOCH;

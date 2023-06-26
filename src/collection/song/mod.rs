@@ -14,7 +14,7 @@ use crate::schema::songs::*;
 #[derive(diesel::Queryable, diesel::Selectable, Debug)]
 #[diesel(table_name = crate::schema::songs)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-struct Song {
+pub struct Song {
     pub id: i32,
     pub path: String,
     pub collection_id: i32,
