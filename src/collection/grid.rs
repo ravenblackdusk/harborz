@@ -3,8 +3,10 @@ use std::rc::Rc;
 use diesel::{Connection, delete, ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use diesel::result::Error;
 use gtk::{prelude, Button, Grid, Label};
+use gtk::pango::EllipsizeMode;
 use prelude::*;
 use crate::collection::model::Collection;
+use crate::common::util::PathString;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::row;
@@ -18,7 +20,8 @@ pub(in crate::collection) trait CollectionGrid {
 impl CollectionGrid for Grid {
     fn add(self: Rc<Self>, collection: &Collection) {
         let remove_button = Button::builder().icon_name("list-remove").build();
-        self.attach(&Label::builder().label(&collection.path).hexpand(true).build(), 0, collection.row, 1, 1);
+        self.attach(&Label::builder().max_width_chars(1).hexpand(true).ellipsize(EllipsizeMode::End)
+            .label(collection.path.to_path().file_name().unwrap().to_str().unwrap()).build(), 0, collection.row, 1, 1);
         self.attach(&remove_button, 1, collection.row, 1, 1);
         let id = collection.id;
         remove_button.connect_clicked(move |_| {

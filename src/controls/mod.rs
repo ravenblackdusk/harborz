@@ -1,13 +1,23 @@
 mod volume;
 
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use gtk::*;
-use gtk::prelude::WidgetExt;
-use prelude::{BoxExt, ButtonExt, MediaStreamExt, RangeExt};
+use gtk::prelude::*;
 use Orientation::Horizontal;
 use crate::common::gtk_box;
+use crate::common::util::PathString;
+use crate::common::wrapper::{SONG_SELECTED, Wrapper};
 use crate::controls::volume::volume_button;
+use crate::db::get_connection;
+use crate::schema::collections::dsl::collections;
+use crate::schema::collections::path;
+use crate::schema::config::current_song_id;
+use crate::schema::config::dsl::config;
+use crate::schema::songs::dsl::songs;
+use crate::schema::songs::path as song_path;
 
 enum PlayPause {
     Play,
@@ -28,7 +38,12 @@ fn format(timestamp: i64) -> String {
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
-pub fn media_controls(media_file: Rc<MediaFile>) -> Frame {
+pub fn media_controls() -> Wrapper {
+    let path_buf = songs.inner_join(collections).inner_join(config).select((path, song_path))
+        .get_result::<(String, String)>(&mut get_connection()).map(|(collection_path, current_song_path)| {
+        collection_path.to_path().join(current_song_path.to_path())
+    }).unwrap_or(PathBuf::from(""));
+    let media_file = Rc::new(MediaFile::for_filename(path_buf));
     let (icon, tooltip) = PlayPause::Play.icon_tooltip();
     let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
     let time = Label::builder().label(format(0)).build();
@@ -75,11 +90,26 @@ pub fn media_controls(media_file: Rc<MediaFile>) -> Frame {
             play_pause.set_tooltip_text(Some(tooltip));
         }
     });
-    scale.connect_change_value(move |_, scroll_type, value| {
-        if scroll_type == ScrollType::Jump {
-            media_file.seek(value as i64);
+    scale.connect_change_value({
+        let media_file = media_file.clone();
+        move |_, scroll_type, value| {
+            if scroll_type == ScrollType::Jump {
+                media_file.seek(value as i64);
+            }
+            Inhibit(true)
         }
-        Inhibit(true)
     });
-    Frame::builder().child(&gtk_box).build()
+    let wrapper = Wrapper::new(&Frame::builder().child(&gtk_box).build());
+    wrapper.connect_local(SONG_SELECTED, true, move |params| {
+        if let [_, song_id, current_song_path, collection_path] = &params {
+            update(config).set(current_song_id.eq(song_id.get::<i32>().unwrap())).execute(&mut get_connection()).unwrap();
+            let playing = media_file.is_playing();
+            if playing { play_pause.emit_clicked(); }
+            media_file.set_filename(Some(current_song_path.get::<String>().unwrap().to_path()
+                .join(collection_path.get::<String>().unwrap().to_path())));
+            // if playing { media_file.play(); }
+        }
+        None
+    });
+    wrapper
 }

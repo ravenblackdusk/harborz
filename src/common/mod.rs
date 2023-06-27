@@ -1,3 +1,6 @@
+pub mod util;
+pub mod wrapper;
+
 use gtk::{Box, Orientation};
 use gtk::builders::BoxBuilder;
 
