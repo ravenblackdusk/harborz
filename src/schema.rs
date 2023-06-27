@@ -12,6 +12,7 @@ diesel::table! {
 diesel::table! {
     config (volume) {
         volume -> Float,
+        current_song_id -> Nullable<Integer>,
     }
 }
 
@@ -30,6 +31,7 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(config -> songs (current_song_id));
 diesel::joinable!(songs -> collections (collection_id));
 
 diesel::allow_tables_to_appear_in_same_query!(

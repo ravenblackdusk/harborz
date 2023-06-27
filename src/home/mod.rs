@@ -2,7 +2,7 @@ use std::path::Path;
 use std::rc::Rc;
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use gtk::{Label, ListBox, MediaFile, ScrolledWindow, SelectionMode};
-use gtk::prelude::{MediaFileExt, MediaStreamExt, ObjectExt};
+use gtk::prelude::{MediaFileExt, ObjectExt};
 use crate::collection::model::Collection;
 use crate::collection::song::Song;
 use crate::db::get_connection;
@@ -49,9 +49,8 @@ pub fn set_body(scrolled_window: Rc<ScrolledWindow>, media_file: Rc<MediaFile>) 
                             |(song, _)| { song.title.as_deref().unwrap_or(song.path.as_str()) }, {
                                 let media_file = media_file.clone();
                                 move |(song, collection)| {
-                                    media_file.pause();
-                                    media_file.set_filename(Some(Path::new(collection.path.as_str()).join(Path::new(song.path.as_str()))));
-                                    media_file.play();
+                                    media_file.set_filename(Some(Path::new(collection.path.as_str())
+                                        .join(Path::new(song.path.as_str()))));
                                 }
                             },
                         );

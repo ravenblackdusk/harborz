@@ -6,10 +6,10 @@ mod common;
 mod config;
 mod home;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use Align::Fill;
-use diesel::migration;
+use diesel::{migration, QueryDsl, RunQueryDsl};
 use migration::Result;
 use diesel_migrations::MigrationHarness;
 use gtk::*;
@@ -21,6 +21,11 @@ use crate::collection::collection_box;
 use crate::common::{box_builder, gtk_box};
 use crate::controls::media_controls;
 use crate::db::get_connection;
+use crate::schema::collections::dsl::collections;
+use crate::schema::collections::path;
+use crate::schema::config::dsl::config as config_table;
+use crate::schema::songs::dsl::songs;
+use crate::schema::songs::path as song_path;
 
 fn main() -> Result<ExitCode> {
     std_logger::Config::logfmt().init();
@@ -29,7 +34,11 @@ fn main() -> Result<ExitCode> {
     let application = Application::builder().application_id("eu.agoor.music-player").build();
     application.connect_activate(|application| {
         let collection_box = collection_box();
-        let media_file = Rc::new(MediaFile::for_filename(Path::new("/mnt/84ac3f9a-dd17-437d-9aad-5c976e6b81e8/Music/Amorphis/Skyforger-2009/01 - Sampo.mp3")));
+        let path_buf = songs.inner_join(collections).inner_join(config_table).select((path, song_path))
+            .get_result::<(String, String)>(&mut get_connection()).map(|(collection_path, song_path2)| {
+            Path::new(collection_path.as_str()).join(Path::new(song_path2.as_str()))
+        }).unwrap_or(PathBuf::from(""));
+        let media_file = Rc::new(MediaFile::for_filename(path_buf));
         let media_controls = media_controls(media_file.clone());
         let title = Rc::new(Label::builder().label("Music player").build());
         let bar = HeaderBar::builder().title_widget(&*title).build();
