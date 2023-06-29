@@ -4,13 +4,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
-use gstreamer::{ClockTime, Element, ElementFactory, SeekFlags};
-use gstreamer::prelude::{ElementExt, ElementExtManual, ObjectExt};
+use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
+use gstreamer::MessageView::{AsyncDone, DurationChanged};
+use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::*;
+use gtk::{Button, Frame, Inhibit, Label, Scale, ScrollType};
 use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use once_cell::sync::Lazy;
-use Orientation::Horizontal;
+use gtk::Orientation::Horizontal;
 use crate::common::gtk_box;
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
@@ -43,33 +44,58 @@ fn format(timestamp: u64) -> String {
 }
 
 //noinspection SpellCheckingInspection
-static PLAYBIN: Lazy<Element> = Lazy::new(|| { ElementFactory::make("playbin").build().unwrap() });
+static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
+    ElementFactory::make("playbin").build().unwrap().downcast::<Pipeline>().unwrap()
+});
 
-trait UriPath { fn to_uri(&self) -> String; }
+//noinspection SpellCheckingInspection
+trait Playbin { fn set_uri(&self, uri: &PathBuf); }
 
-impl UriPath for PathBuf { fn to_uri(&self) -> String { format!("file:{}", self.to_str().unwrap()) } }
+impl Playbin for Pipeline {
+    fn set_uri(&self, uri: &PathBuf) {
+        self.set_property("uri", format!("file:{}", uri.to_str().unwrap()));
+    }
+}
 
 pub fn media_controls() -> Wrapper {
     let path_buf = songs.inner_join(collections).inner_join(config).select((path, song_path))
         .get_result::<(String, String)>(&mut get_connection()).map(|(collection_path, current_song_path)| {
         collection_path.to_path().join(current_song_path.to_path())
     }).unwrap_or(PathBuf::from(""));
-    PLAYBIN.set_property("uri", path_buf.to_uri());
+    PLAYBIN.set_uri(&path_buf);
     PLAYBIN.set_state(Paused).unwrap();
     let (icon, tooltip) = PlayPause::Play.icon_tooltip();
     let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
-    let position = Label::new(PLAYBIN.query_position::<ClockTime>().map(|a| { format(a.nseconds()) }).as_deref());
+    let position_label = Rc::new(Label::new(None));
     let scale = Rc::new(Scale::builder().hexpand(true).build());
-    let duration = PLAYBIN.query_duration().map(ClockTime::nseconds);
-    if let Some(duration) = duration {
-        scale.set_range(0.0, duration as f64);
-    }
-    let duration_label = Rc::new(Label::new(duration.map(format).as_deref()));
+    let duration_label = Rc::new(Label::new(None));
+    PLAYBIN.bus().unwrap().add_watch_local({
+        let position_label = position_label.clone();
+        let duration_label = duration_label.clone();
+        let scale = scale.clone();
+        move |_, message| {
+            match message.view() {
+                AsyncDone(_) => {
+                    if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
+                        position_label.set_label(&format(position));
+                    }
+                }
+                DurationChanged(_) => {
+                    if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
+                        duration_label.set_label(&format(duration));
+                        scale.set_range(0.0, duration as f64);
+                    }
+                }
+                _ => {}
+            };
+            Continue(true)
+        }
+    }).unwrap();
     let gtk_box = gtk_box(Horizontal);
     gtk_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
     gtk_box.append(&play_pause);
     gtk_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
-    gtk_box.append(&position);
+    gtk_box.append(&*position_label);
     gtk_box.append(&*scale);
     gtk_box.append(&*duration_label);
     gtk_box.append(&*volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
@@ -86,18 +112,20 @@ pub fn media_controls() -> Wrapper {
     });
     scale.connect_change_value(|_, scroll_type, value| {
         if scroll_type == ScrollType::Jump {
-            PLAYBIN.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value as u64)).unwrap();
+            PLAYBIN.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value as u64))
+                .unwrap();
         }
         Inhibit(true)
     });
     let wrapper = Wrapper::new(&Frame::builder().child(&gtk_box).build());
     wrapper.connect_local(SONG_SELECTED, true, move |params| {
         if let [_, song_id, current_song_path, collection_path] = &params {
-            update(config).set(current_song_id.eq(song_id.get::<i32>().unwrap())).execute(&mut get_connection()).unwrap();
+            update(config).set(current_song_id.eq(song_id.get::<i32>().unwrap())).execute(&mut get_connection())
+                .unwrap();
             let playing = PLAYBIN.current_state() == Playing;
             if playing { PLAYBIN.set_state(Null).unwrap(); }
-            PLAYBIN.set_property("uri", collection_path.get::<String>().unwrap().to_path()
-                .join(current_song_path.get::<String>().unwrap().to_path()).to_uri());
+            PLAYBIN.set_uri(&collection_path.get::<String>().unwrap().to_path()
+                .join(current_song_path.get::<String>().unwrap().to_path()));
             if playing { PLAYBIN.set_state(Playing).unwrap(); } else { play_pause.emit_clicked(); }
         }
         None
