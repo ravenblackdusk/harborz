@@ -67,32 +67,16 @@ pub fn media_controls() -> Wrapper {
     PLAYBIN.set_state(Paused).unwrap();
     let (icon, tooltip) = PlayPause::Play.icon_tooltip();
     let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
-    let position_label = Rc::new(Label::new(None));
+    let position_label = Label::new(None);
     let scale = Rc::new(Scale::builder().hexpand(true).build());
-    let duration_label = Rc::new(Label::new(None));
-    PLAYBIN.bus().unwrap().add_watch_local({
-        let duration_label = duration_label.clone();
-        let scale = scale.clone();
-        move |_, message| {
-            match message.view() {
-                DurationChanged(_) => {
-                    if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
-                        duration_label.set_label(&format(duration));
-                        scale.set_range(0.0, duration as f64);
-                    }
-                }
-                _ => {}
-            };
-            Continue(true)
-        }
-    }).unwrap();
+    let duration_label = Label::new(None);
     let gtk_box = gtk_box(Horizontal);
     gtk_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
     gtk_box.append(&play_pause);
     gtk_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
-    gtk_box.append(&*position_label);
+    gtk_box.append(&position_label);
     gtk_box.append(&*scale);
-    gtk_box.append(&*duration_label);
+    gtk_box.append(&duration_label);
     gtk_box.append(&*volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
     play_pause.connect_clicked(|play_pause| {
         let (icon, tooltip) = if PLAYBIN.current_state() == Playing {
@@ -125,6 +109,18 @@ pub fn media_controls() -> Wrapper {
         }
         None
     });
+    PLAYBIN.bus().unwrap().add_watch_local({
+        let scale = scale.clone();
+        move |_, message| {
+            if let DurationChanged(_) = message.view() {
+                if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
+                    duration_label.set_label(&format(duration));
+                    scale.set_range(0.0, duration as f64);
+                }
+            }
+            Continue(true)
+        }
+    }).unwrap();
     timeout_add_local(Duration::from_millis(200), move || {
         if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
             position_label.set_label(&format(position));
