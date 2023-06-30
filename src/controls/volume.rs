@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use diesel::{ExpressionMethods, RunQueryDsl, update};
 use gtk::*;
 use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
@@ -11,14 +10,14 @@ use crate::schema::config::volume;
 
 const VOLUME_STEP: f64 = 0.2;
 
-pub(in crate::controls) fn volume_button<F: Fn(f64) + 'static>(on_volume_change: F) -> Rc<MenuButton> {
+pub(in crate::controls) fn volume_button<F: Fn(f64) + Clone + 'static>(on_volume_change: F) -> MenuButton {
     let gtk_box = gtk_box(Vertical);
-    let button = Rc::new(MenuButton::builder().popover(&Popover::builder().child(&gtk_box).build()).build());
-    let scale = Rc::new(Scale::builder().orientation(Vertical).inverted(true).height_request(100).build());
+    let button = MenuButton::builder().popover(&Popover::builder().child(&gtk_box).build()).build();
+    let scale = Scale::builder().orientation(Vertical).inverted(true).height_request(100).build();
     let increase_volume = Button::builder().icon_name("list-add").build();
     let decrease_volume = Button::builder().icon_name("list-remove").build();
     gtk_box.append(&increase_volume);
-    gtk_box.append(&*scale);
+    gtk_box.append(&scale);
     gtk_box.append(&decrease_volume);
     scale.set_range(0.0, 1.0);
     let cloned_scale = scale.clone();
@@ -41,10 +40,10 @@ pub(in crate::controls) fn volume_button<F: Fn(f64) + 'static>(on_volume_change:
         }));
     };
     update_ui(get_volume());
-    let update_volume = Rc::new(move |value| {
+    let update_volume = move |value| {
         update(config).set(volume.eq(value as f32)).execute(&mut get_connection()).unwrap();
         update_ui(value)
-    });
+    };
     cloned_scale.connect_change_value({
         let update_volume = update_volume.clone();
         move |_, scroll_type, value| {

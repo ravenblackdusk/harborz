@@ -1,15 +1,14 @@
 mod volume;
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::Duration;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::timeout_add_local;
-use gstreamer::MessageView::DurationChanged;
+use gstreamer::MessageView::AsyncDone;
 use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, Frame, Inhibit, Label, Scale, ScrollType};
+use gtk::{Button, Inhibit, Label, Scale, ScrollType};
 use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use once_cell::sync::Lazy;
 use gtk::Orientation::Horizontal;
@@ -50,11 +49,26 @@ static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
 });
 
 //noinspection SpellCheckingInspection
-trait Playbin { fn set_uri(&self, uri: &PathBuf); }
+trait Playbin {
+    fn set_uri(&self, uri: &PathBuf);
+    fn play(&self, label: &Label, scale: &Scale);
+}
 
 impl Playbin for Pipeline {
     fn set_uri(&self, uri: &PathBuf) {
         self.set_property("uri", format!("file:{}", uri.to_str().unwrap()));
+    }
+    fn play(&self, label: &Label, scale: &Scale) {
+        self.set_state(Playing).unwrap();
+        let label = label.clone();
+        let scale = scale.clone();
+        timeout_add_local(Duration::from_millis(200), move || {
+            if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
+                label.set_label(&format(position));
+                scale.set_value(position as f64);
+            }
+            Continue(PLAYBIN.current_state() == Playing || PLAYBIN.pending_state() == Playing)
+        });
     }
 }
 
@@ -64,30 +78,34 @@ pub fn media_controls() -> Wrapper {
         collection_path.to_path().join(current_song_path.to_path())
     }).unwrap_or(PathBuf::from(""));
     PLAYBIN.set_uri(&path_buf);
-    PLAYBIN.set_state(Paused).unwrap();
     let (icon, tooltip) = PlayPause::Play.icon_tooltip();
     let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
-    let position_label = Label::new(None);
-    let scale = Rc::new(Scale::builder().hexpand(true).build());
-    let duration_label = Label::new(None);
+    let position_label = Label::new(Some(&format(0)));
+    let scale = Scale::builder().hexpand(true).build();
+    scale.set_range(0.0, 1.0);
+    let duration_label = Label::new(Some(&format(0)));
     let gtk_box = gtk_box(Horizontal);
     gtk_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
     gtk_box.append(&play_pause);
     gtk_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
     gtk_box.append(&position_label);
-    gtk_box.append(&*scale);
+    gtk_box.append(&scale);
     gtk_box.append(&duration_label);
-    gtk_box.append(&*volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
-    play_pause.connect_clicked(|play_pause| {
-        let (icon, tooltip) = if PLAYBIN.current_state() == Playing {
-            PLAYBIN.set_state(Paused).unwrap();
-            PlayPause::Play
-        } else {
-            PLAYBIN.set_state(Playing).unwrap();
-            PlayPause::Pause
-        }.icon_tooltip();
-        play_pause.set_icon_name(icon);
-        play_pause.set_tooltip_text(Some(tooltip));
+    gtk_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
+    play_pause.connect_clicked({
+        let position_label = position_label.clone();
+        let scale = scale.clone();
+        move |play_pause| {
+            let (icon, tooltip) = if PLAYBIN.current_state() == Playing {
+                PLAYBIN.set_state(Paused).unwrap();
+                PlayPause::Play
+            } else {
+                PLAYBIN.play(&position_label, &scale);
+                PlayPause::Pause
+            }.icon_tooltip();
+            play_pause.set_icon_name(icon);
+            play_pause.set_tooltip_text(Some(tooltip));
+        }
     });
     scale.connect_change_value(|_, scroll_type, value| {
         if scroll_type == ScrollType::Jump {
@@ -96,23 +114,30 @@ pub fn media_controls() -> Wrapper {
         }
         Inhibit(true)
     });
-    let wrapper = Wrapper::new(&Frame::builder().child(&gtk_box).build());
-    wrapper.connect_local(SONG_SELECTED, true, move |params| {
-        if let [_, song_id, current_song_path, collection_path] = &params {
-            update(config).set(current_song_id.eq(song_id.get::<i32>().unwrap())).execute(&mut get_connection())
-                .unwrap();
-            let playing = PLAYBIN.current_state() == Playing;
-            if playing { PLAYBIN.set_state(Null).unwrap(); }
-            PLAYBIN.set_uri(&collection_path.get::<String>().unwrap().to_path()
-                .join(current_song_path.get::<String>().unwrap().to_path()));
-            if playing { PLAYBIN.set_state(Playing).unwrap(); } else { play_pause.emit_clicked(); }
+    let wrapper = Wrapper::new(&gtk_box);
+    wrapper.connect_local(SONG_SELECTED, true, {
+        let scale = scale.clone();
+        move |params| {
+            if let [_, song_id, current_song_path, collection_path] = &params {
+                update(config).set(current_song_id.eq(song_id.get::<i32>().unwrap())).execute(&mut get_connection())
+                    .unwrap();
+                let playing = PLAYBIN.current_state() == Playing;
+                if playing { PLAYBIN.set_state(Null).unwrap(); }
+                PLAYBIN.set_uri(&collection_path.get::<String>().unwrap().to_path()
+                    .join(current_song_path.get::<String>().unwrap().to_path()));
+                if playing {
+                    PLAYBIN.play(&position_label, &scale);
+                } else {
+                    play_pause.emit_clicked();
+                }
+            }
+            None
         }
-        None
     });
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
         move |_, message| {
-            if let DurationChanged(_) = message.view() {
+            if let AsyncDone(_) = message.view() {
                 if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
                     duration_label.set_label(&format(duration));
                     scale.set_range(0.0, duration as f64);
@@ -121,12 +146,5 @@ pub fn media_controls() -> Wrapper {
             Continue(true)
         }
     }).unwrap();
-    timeout_add_local(Duration::from_millis(200), move || {
-        if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
-            position_label.set_label(&format(position));
-            scale.set_value(position as f64);
-        }
-        Continue(true)
-    });
     wrapper
 }

@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use gtk::{Label, ListBox, ScrolledWindow, SelectionMode};
 use gtk::prelude::ObjectExt;
@@ -12,7 +11,7 @@ use crate::schema::songs::dsl::songs;
 
 const ID: &'static str = "id";
 
-fn list_box<T: 'static, S: Fn(&T) -> &str, F: Fn(&T) + 'static>(scrolled_window: Rc<ScrolledWindow>, row_items: Vec<T>,
+fn list_box<T: 'static, S: Fn(&T) -> &str, F: Fn(&T) + 'static>(scrolled_window: &ScrolledWindow, row_items: Vec<T>,
     to_str: S, on_row_activated: F) {
     let list_box = ListBox::builder().selection_mode(SelectionMode::None).build();
     for row_item in row_items {
@@ -31,18 +30,19 @@ fn or_none(string: &Option<String>) -> &str {
     string.as_deref().unwrap_or("None")
 }
 
-pub fn set_body(scrolled_window: Rc<ScrolledWindow>, media_controls: Rc<Wrapper>) {
-    list_box(scrolled_window.clone(),
+pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
+    list_box(scrolled_window,
         songs.select(artist).group_by(artist).get_results::<Option<String>>(&mut get_connection()).unwrap(), or_none, {
             let scrolled_window = scrolled_window.clone();
+            let media_controls = media_controls.clone();
             move |artist_string| {
-                list_box(scrolled_window.clone(), songs.filter(artist.eq(artist_string)).select(album).group_by(album)
+                list_box(&scrolled_window, songs.filter(artist.eq(artist_string)).select(album).group_by(album)
                     .get_results::<Option<String>>(&mut get_connection()).unwrap(), or_none, {
                     let scrolled_window = scrolled_window.clone();
                     let artist_string = artist_string.to_owned();
                     let media_controls = media_controls.clone();
                     move |album_string| {
-                        list_box(scrolled_window.clone(),
+                        list_box(&scrolled_window,
                             songs.inner_join(collections)
                                 .filter(artist.eq(&artist_string).and(album.eq(album_string)))
                                 .get_results::<(Song, Collection)>(&mut get_connection()).unwrap(),

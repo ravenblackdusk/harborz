@@ -1,3 +1,4 @@
+use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
 use diesel::{insert_or_ignore_into, RunQueryDsl, ExpressionMethods, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
@@ -27,11 +28,29 @@ pub struct Song {
     pub album_artist: Option<String>,
 }
 
-static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(1)).unwrap() });
+static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(30)).unwrap() });
 
-pub(in crate::collection) fn import_songs(collection: &Collection,
+pub(in crate::collection) enum ImportProgress {
+    CollectionStart(i32),
+    Pulse,
+    Fraction(f64),
+    CollectionEnd(i32, String),
+    End,
+}
+
+pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Option<SystemTime> {
-    WalkDir::new(&collection.path).into_iter().filter_map(|entry_result| {
+    sender.send(ImportProgress::CollectionStart(collection.id)).unwrap();
+    let mut total = 0;
+    for _ in WalkDir::new(&collection.path) {
+        total += 1;
+        sender.send(ImportProgress::Pulse).unwrap();
+    }
+    let total = total as f64;
+    let mut count = 0.0;
+    let result = WalkDir::new(&collection.path).into_iter().filter_map(|entry_result| {
+        count += 1.0;
+        sender.send(ImportProgress::Fraction(count / total)).unwrap();
         let entry = entry_result.unwrap();
         entry.file_type().is_file().then_some(entry)
     }).map(|entry| -> anyhow::Result<_> {
@@ -61,5 +80,7 @@ pub(in crate::collection) fn import_songs(collection: &Collection,
         } else {
             None
         })
-    }).filter_map(|result| { result.unwrap() }).max()
+    }).filter_map(|result| { result.unwrap() }).max();
+    sender.send(ImportProgress::CollectionEnd(collection.id, collection.path.to_owned())).unwrap();
+    result
 }
