@@ -5,7 +5,8 @@ use std::rc::Rc;
 use std::time::Duration;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
-use gstreamer::MessageView::{AsyncDone, DurationChanged};
+use gstreamer::glib::timeout_add_local;
+use gstreamer::MessageView::DurationChanged;
 use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, Frame, Inhibit, Label, Scale, ScrollType};
@@ -70,16 +71,10 @@ pub fn media_controls() -> Wrapper {
     let scale = Rc::new(Scale::builder().hexpand(true).build());
     let duration_label = Rc::new(Label::new(None));
     PLAYBIN.bus().unwrap().add_watch_local({
-        let position_label = position_label.clone();
         let duration_label = duration_label.clone();
         let scale = scale.clone();
         move |_, message| {
             match message.view() {
-                AsyncDone(_) => {
-                    if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
-                        position_label.set_label(&format(position));
-                    }
-                }
                 DurationChanged(_) => {
                     if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
                         duration_label.set_label(&format(duration));
@@ -129,6 +124,13 @@ pub fn media_controls() -> Wrapper {
             if playing { PLAYBIN.set_state(Playing).unwrap(); } else { play_pause.emit_clicked(); }
         }
         None
+    });
+    timeout_add_local(Duration::from_millis(200), move || {
+        if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
+            position_label.set_label(&format(position));
+            scale.set_value(position as f64);
+        }
+        Continue(true)
     });
     wrapper
 }
