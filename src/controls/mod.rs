@@ -26,11 +26,6 @@ use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::path as song_path;
 
-const PLAY_ICON: &'static str = "media-playback-start";
-const PLAY_TOOLTIP: &'static str = "Play";
-const PAUSE_ICON: &'static str = "media-playback-pause";
-const PAUSE_TOOLTIP: &'static str = "Pause";
-
 trait Playable {
     fn change_state(&self, icon: &str, tooltip: &str);
     fn play(&self);
@@ -43,10 +38,10 @@ impl Playable for Button {
         self.set_tooltip_text(Some(tooltip));
     }
     fn play(&self) {
-        self.change_state(PLAY_ICON, PLAY_TOOLTIP);
+        self.change_state("media-playback-start", "Play");
     }
     fn pause(&self) {
-        self.change_state(PAUSE_ICON, PAUSE_TOOLTIP);
+        self.change_state("media-playback-pause", "Pause");
     }
 }
 
