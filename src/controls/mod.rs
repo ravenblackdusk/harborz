@@ -5,7 +5,7 @@ use std::time::Duration;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::timeout_add_local;
-use gstreamer::MessageView::AsyncDone;
+use gstreamer::MessageView::{AsyncDone, DurationChanged};
 use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, Inhibit, Label, Scale, ScrollType};
@@ -198,7 +198,7 @@ pub fn media_controls() -> Wrapper {
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
         move |_, message| {
-            if let AsyncDone(_) = message.view() {
+            if let AsyncDone(_) | DurationChanged(_) = message.view() {
                 if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
                     duration_label.set_label(&format(duration));
                     scale.set_range(0.0, duration as f64);
