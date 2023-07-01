@@ -10,9 +10,11 @@ use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, Inhibit, Label, Scale, ScrollType};
 use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
+use gtk::Orientation::{Horizontal, Vertical};
+use gtk::Align::Center;
+use log::warn;
 use once_cell::sync::Lazy;
-use gtk::Orientation::Horizontal;
-use crate::common::gtk_box;
+use crate::common::{box_builder, gtk_box};
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
 use crate::controls::volume::volume_button;
@@ -24,17 +26,27 @@ use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::path as song_path;
 
-enum PlayPause {
-    Play,
-    Pause,
+const PLAY_ICON: &'static str = "media-playback-start";
+const PLAY_TOOLTIP: &'static str = "Play";
+const PAUSE_ICON: &'static str = "media-playback-pause";
+const PAUSE_TOOLTIP: &'static str = "Pause";
+
+trait Playable {
+    fn change_state(&self, icon: &str, tooltip: &str);
+    fn play(&self);
+    fn pause(&self);
 }
 
-impl PlayPause {
-    fn icon_tooltip(&self) -> (&'static str, &'static str) {
-        match self {
-            PlayPause::Play => ("media-playback-start", "Play"),
-            PlayPause::Pause => ("media-playback-pause", "Pause"),
-        }
+impl Playable for Button {
+    fn change_state(&self, icon: &str, tooltip: &str) {
+        self.set_icon_name(icon);
+        self.set_tooltip_text(Some(tooltip));
+    }
+    fn play(&self) {
+        self.change_state(PLAY_ICON, PLAY_TOOLTIP);
+    }
+    fn pause(&self) {
+        self.change_state(PAUSE_ICON, PAUSE_TOOLTIP);
     }
 }
 
@@ -43,6 +55,7 @@ fn format(timestamp: u64) -> String {
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
+const URI: &'static str = "uri";
 //noinspection SpellCheckingInspection
 static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     ElementFactory::make("playbin").build().unwrap().downcast::<Pipeline>().unwrap()
@@ -51,24 +64,33 @@ static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
 //noinspection SpellCheckingInspection
 trait Playbin {
     fn set_uri(&self, uri: &PathBuf);
-    fn play(&self, label: &Label, scale: &Scale);
+    fn get_position(&self) -> Option<u64>;
+    fn play(&'static self, label: &Label, scale: &Scale) -> anyhow::Result<()>;
+    fn seek_internal(&self, value: u64);
 }
 
 impl Playbin for Pipeline {
     fn set_uri(&self, uri: &PathBuf) {
-        self.set_property("uri", format!("file:{}", uri.to_str().unwrap()));
+        self.set_property(URI, format!("file:{}", uri.to_str().unwrap()));
     }
-    fn play(&self, label: &Label, scale: &Scale) {
-        self.set_state(Playing).unwrap();
+    fn get_position(&self) -> Option<u64> {
+        PLAYBIN.query_position().map(ClockTime::nseconds)
+    }
+    fn play(&'static self, label: &Label, scale: &Scale) -> anyhow::Result<()> {
+        self.set_state(Playing)?;
         let label = label.clone();
         let scale = scale.clone();
         timeout_add_local(Duration::from_millis(200), move || {
-            if let Some(position) = PLAYBIN.query_position().map(ClockTime::nseconds) {
+            if let Some(position) = self.get_position() {
                 label.set_label(&format(position));
                 scale.set_value(position as f64);
             }
-            Continue(PLAYBIN.current_state() == Playing || PLAYBIN.pending_state() == Playing)
+            Continue(self.current_state() == Playing || self.pending_state() == Playing)
         });
+        Ok(())
+    }
+    fn seek_internal(&self, value: u64) {
+        self.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value)).unwrap();
     }
 }
 
@@ -78,43 +100,61 @@ pub fn media_controls() -> Wrapper {
         collection_path.to_path().join(current_song_path.to_path())
     }).unwrap_or(PathBuf::from(""));
     PLAYBIN.set_uri(&path_buf);
-    let (icon, tooltip) = PlayPause::Play.icon_tooltip();
-    let play_pause = Button::builder().icon_name(icon).tooltip_text(tooltip).build();
+    let play_pause = Button::new();
+    play_pause.play();
     let position_label = Label::new(Some(&format(0)));
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
     let duration_label = Label::new(Some(&format(0)));
-    let gtk_box = gtk_box(Horizontal);
-    gtk_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
-    gtk_box.append(&play_pause);
-    gtk_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
-    gtk_box.append(&position_label);
-    gtk_box.append(&scale);
-    gtk_box.append(&duration_label);
-    gtk_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
+    let controls = gtk_box(Vertical);
+    let position_box = gtk_box(Horizontal);
+    let control_box = box_builder().orientation(Horizontal).halign(Center).build();
+    position_box.append(&position_label);
+    position_box.append(&scale);
+    position_box.append(&duration_label);
+    control_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
+    let seek_backward = Button::builder().icon_name("media-seek-backward").tooltip_text("Seek 10s backward").build();
+    seek_backward.connect_clicked(|_| {
+        if let Some(position) = PLAYBIN.get_position() {
+            PLAYBIN.seek_internal(position - Duration::from_secs(10).as_nanos() as u64);
+        }
+    });
+    control_box.append(&seek_backward);
+    control_box.append(&play_pause);
+    let seek_forward = Button::builder().icon_name("media-seek-forward").tooltip_text("Seek 30s forward").build();
+    seek_forward.connect_clicked(|_| {
+        if let Some(position) = PLAYBIN.get_position() {
+            PLAYBIN.seek_internal(position + Duration::from_secs(30).as_nanos() as u64);
+        }
+    });
+    control_box.append(&seek_forward);
+    control_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
+    control_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
+    controls.append(&position_box);
+    controls.append(&control_box);
     play_pause.connect_clicked({
         let position_label = position_label.clone();
         let scale = scale.clone();
         move |play_pause| {
-            let (icon, tooltip) = if PLAYBIN.current_state() == Playing {
+            if PLAYBIN.current_state() == Playing {
                 PLAYBIN.set_state(Paused).unwrap();
-                PlayPause::Play
+                play_pause.play();
             } else {
-                PLAYBIN.play(&position_label, &scale);
-                PlayPause::Pause
-            }.icon_tooltip();
-            play_pause.set_icon_name(icon);
-            play_pause.set_tooltip_text(Some(tooltip));
+                match PLAYBIN.play(&position_label, &scale) {
+                    Ok(_) => { play_pause.pause(); }
+                    Err(error) => { warn!("error trying to play {} {}", PLAYBIN.property::<String>(URI), error); }
+                }
+                if let Ok(_) = PLAYBIN.play(&position_label, &scale) {
+                    play_pause.pause();
+                }
+            }
         }
     });
     scale.connect_change_value(|_, scroll_type, value| {
-        if scroll_type == ScrollType::Jump {
-            PLAYBIN.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value as u64))
-                .unwrap();
-        }
+        if scroll_type == ScrollType::Jump { PLAYBIN.seek_internal(value as u64); }
         Inhibit(true)
     });
-    let wrapper = Wrapper::new(&gtk_box);
+    let wrapper = Wrapper::new(&controls);
     wrapper.connect_local(SONG_SELECTED, true, {
         let scale = scale.clone();
         move |params| {
@@ -126,7 +166,7 @@ pub fn media_controls() -> Wrapper {
                 PLAYBIN.set_uri(&collection_path.get::<String>().unwrap().to_path()
                     .join(current_song_path.get::<String>().unwrap().to_path()));
                 if playing {
-                    PLAYBIN.play(&position_label, &scale);
+                    PLAYBIN.play(&position_label, &scale).unwrap();
                 } else {
                     play_pause.emit_clicked();
                 }

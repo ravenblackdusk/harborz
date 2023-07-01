@@ -12,11 +12,18 @@ use crate::schema::collections::dsl::collections;
 use crate::schema::collections::row;
 
 pub(in crate::collection) trait CollectionBox {
-    fn add(&self, id: i32, path: &String);
     fn new() -> Self;
+    fn add(&self, id: i32, path: &String);
 }
 
 impl CollectionBox for gtk::Box {
+    fn new() -> Self {
+        let gtk_box = gtk_box(Vertical);
+        for collection in collections.load::<Collection>(&mut get_connection()).unwrap() {
+            gtk_box.clone().add(collection.id, &collection.path);
+        }
+        gtk_box
+    }
     fn add(&self, id: i32, path: &String) {
         let remove_button = Button::builder().icon_name("list-remove").build();
         let inner_box = gtk_box(Horizontal);
@@ -34,12 +41,5 @@ impl CollectionBox for gtk::Box {
                 this.remove(&inner_box);
             }
         });
-    }
-    fn new() -> Self {
-        let gtk_box = gtk_box(Vertical);
-        for collection in collections.load::<Collection>(&mut get_connection()).unwrap() {
-            gtk_box.clone().add(collection.id, &collection.path);
-        }
-        gtk_box
     }
 }
