@@ -66,7 +66,8 @@ trait Playbin {
     fn set_uri(&self, uri: &PathBuf);
     fn get_position(&self) -> Option<u64>;
     fn play(&'static self, label: &Label, scale: &Scale) -> anyhow::Result<()>;
-    fn seek_internal(&self, value: u64);
+    fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()>;
+    fn simple_seek(&self, delta_seconds: i64, label: &Label, scale: &Scale);
 }
 
 impl Playbin for Pipeline {
@@ -89,8 +90,20 @@ impl Playbin for Pipeline {
         });
         Ok(())
     }
-    fn seek_internal(&self, value: u64) {
-        self.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value)).unwrap();
+    fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()> {
+        self.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value))?;
+        label.set_label(&format(value));
+        Ok(scale.set_value(value as f64))
+    }
+    fn simple_seek(&self, delta_seconds: i64, label: &Label, scale: &Scale) {
+        if let Some(position) = self.get_position() {
+            let delta_nanos = Duration::from_secs(delta_seconds.abs() as u64).as_nanos() as i64;
+            self.seek_internal(
+                ((position as i64) + if delta_seconds >= 0 { delta_nanos } else { -delta_nanos })
+                    .clamp(0, PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap() as i64) as u64,
+                &label, &scale
+            ).unwrap();
+        }
     }
 }
 
@@ -114,18 +127,18 @@ pub fn media_controls() -> Wrapper {
     position_box.append(&duration_label);
     control_box.append(&Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build());
     let seek_backward = Button::builder().icon_name("media-seek-backward").tooltip_text("Seek 10s backward").build();
-    seek_backward.connect_clicked(|_| {
-        if let Some(position) = PLAYBIN.get_position() {
-            PLAYBIN.seek_internal(position - Duration::from_secs(10).as_nanos() as u64);
-        }
+    seek_backward.connect_clicked({
+        let position_label = position_label.clone();
+        let scale = scale.clone();
+        move |_| { PLAYBIN.simple_seek(-10, &position_label, &scale); }
     });
     control_box.append(&seek_backward);
     control_box.append(&play_pause);
     let seek_forward = Button::builder().icon_name("media-seek-forward").tooltip_text("Seek 30s forward").build();
-    seek_forward.connect_clicked(|_| {
-        if let Some(position) = PLAYBIN.get_position() {
-            PLAYBIN.seek_internal(position + Duration::from_secs(30).as_nanos() as u64);
-        }
+    seek_forward.connect_clicked({
+        let position_label = position_label.clone();
+        let scale = scale.clone();
+        move |_| { PLAYBIN.simple_seek(30, &position_label, &scale); }
     });
     control_box.append(&seek_forward);
     control_box.append(&Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build());
@@ -150,9 +163,17 @@ pub fn media_controls() -> Wrapper {
             }
         }
     });
-    scale.connect_change_value(|_, scroll_type, value| {
-        if scroll_type == ScrollType::Jump { PLAYBIN.seek_internal(value as u64); }
-        Inhibit(true)
+    scale.connect_change_value({
+        let position_label = position_label.clone();
+        let scale = scale.clone();
+        move |_, scroll_type, value| {
+            if scroll_type == ScrollType::Jump {
+                if let Err(error) = PLAYBIN.seek_internal(value as u64, &position_label, &scale) {
+                    warn!("error trying to seek to {} {}", value, error);
+                }
+            }
+            Inhibit(true)
+        }
     });
     let wrapper = Wrapper::new(&controls);
     wrapper.connect_local(SONG_SELECTED, true, {
