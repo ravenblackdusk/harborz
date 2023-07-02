@@ -1,23 +1,26 @@
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
-use gtk::{Label, ListBox, ScrolledWindow, SelectionMode};
-use gtk::prelude::ObjectExt;
+use gtk::{Label, ListBox, ScrolledWindow, SelectionMode, Widget};
+use gtk::Orientation::Horizontal;
+use gtk::prelude::{BoxExt, IsA, ObjectExt};
+use gtk::Align::Start;
 use crate::collection::model::Collection;
 use crate::collection::song::Song;
+use crate::common::gtk_box;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
-use crate::schema::songs::{album, artist};
+use crate::schema::songs::{album, artist, track_number};
 use crate::schema::songs::dsl::songs;
 
 const ID: &'static str = "id";
 
-fn list_box<T: 'static, S: Fn(&T) -> &str, F: Fn(&T) + 'static>(scrolled_window: &ScrolledWindow, row_items: Vec<T>,
-    to_str: S, on_row_activated: F) {
+fn list_box<T: 'static, W: IsA<Widget>, S: Fn(&T) -> W, F: Fn(&T) + 'static>(scrolled_window: &ScrolledWindow,
+    row_items: Vec<T>, to_widget: S, on_row_activated: F) {
     let list_box = ListBox::builder().selection_mode(SelectionMode::None).build();
     for row_item in row_items {
-        let label = Label::new(Some(to_str(&row_item)));
-        unsafe { label.set_data(ID, row_item); }
-        list_box.append(&label);
+        let widget = to_widget(&row_item);
+        unsafe { widget.set_data(ID, row_item); }
+        list_box.append(&widget);
     }
     list_box.connect_row_activated(move |_, list_box_row| {
         let item = unsafe { gtk::prelude::ListBoxRowExt::child(list_box_row).unwrap().data::<T>(ID).unwrap().as_ref() };
@@ -26,8 +29,8 @@ fn list_box<T: 'static, S: Fn(&T) -> &str, F: Fn(&T) + 'static>(scrolled_window:
     scrolled_window.set_child(Some(&list_box));
 }
 
-fn or_none(string: &Option<String>) -> &str {
-    string.as_deref().unwrap_or("None")
+fn or_none(string: &Option<String>) -> Label {
+    Label::builder().label(string.as_deref().unwrap_or("None")).halign(Start).build()
 }
 
 pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
@@ -44,9 +47,15 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                     move |album_string| {
                         list_box(&scrolled_window,
                             songs.inner_join(collections)
-                                .filter(artist.eq(&artist_string).and(album.eq(album_string)))
+                                .filter(artist.eq(&artist_string).and(album.eq(album_string))).order_by(track_number)
                                 .get_results::<(Song, Collection)>(&mut get_connection()).unwrap(),
-                            |(song, _)| { song.title.as_deref().unwrap_or(song.path.as_str()) }, {
+                            |(song, _)| {
+                                let artist_box = gtk_box(Horizontal);
+                                artist_box.append(&Label::new(song.track_number.map(|it| { it.to_string() }).as_deref()));
+                                artist_box.append(&Label::builder().hexpand(true).halign(Start)
+                                    .label(song.title.as_deref().unwrap_or(song.path.as_str())).build());
+                                artist_box
+                            }, {
                                 let media_controls = media_controls.clone();
                                 move |(song, collection)| {
                                     media_controls.emit_by_name::<()>(SONG_SELECTED, &[&song.id, &song.path, &collection.path]);
