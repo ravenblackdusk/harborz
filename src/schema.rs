@@ -28,6 +28,7 @@ diesel::table! {
         genre -> Nullable<Text>,
         track_number -> Nullable<Integer>,
         album_artist -> Nullable<Text>,
+        duration -> BigInt,
     }
 }
 

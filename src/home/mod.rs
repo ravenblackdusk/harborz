@@ -6,6 +6,7 @@ use gtk::Align::Start;
 use crate::collection::model::Collection;
 use crate::collection::song::Song;
 use crate::common::gtk_box;
+use crate::common::util::{format, PathString};
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
@@ -46,14 +47,14 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                     let media_controls = media_controls.clone();
                     move |album_string| {
                         list_box(&scrolled_window,
-                            songs.inner_join(collections)
-                                .filter(artist.eq(&artist_string).and(album.eq(album_string))).order_by(track_number)
-                                .get_results::<(Song, Collection)>(&mut get_connection()).unwrap(),
+                            songs.inner_join(collections).filter(artist.eq(&artist_string).and(album.eq(album_string)))
+                                .order_by(track_number).get_results::<(Song, Collection)>(&mut get_connection()).unwrap(),
                             |(song, _)| {
                                 let artist_box = gtk_box(Horizontal);
                                 artist_box.append(&Label::new(song.track_number.map(|it| { it.to_string() }).as_deref()));
-                                artist_box.append(&Label::builder().hexpand(true).halign(Start)
-                                    .label(song.title.as_deref().unwrap_or(song.path.as_str())).build());
+                                artist_box.append(&Label::builder().hexpand(true).halign(Start).label(song.title.as_deref()
+                                    .unwrap_or(song.path.to_path().file_name().unwrap().to_str().unwrap())).build());
+                                artist_box.append(&Label::new(Some(&format(song.duration as u64))));
                                 artist_box
                             }, {
                                 let media_controls = media_controls.clone();

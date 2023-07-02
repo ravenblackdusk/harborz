@@ -26,6 +26,7 @@ pub struct Song {
     pub genre: Option<String>,
     pub track_number: Option<i32>,
     pub album_artist: Option<String>,
+    pub duration: i64,
 }
 
 static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(30)).unwrap() });
@@ -68,6 +69,7 @@ pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sende
                     genre.eq(tag_list_ref.get::<Genre>().map(|it| { it.get().to_owned() })),
                     track_number.eq(tag_list_ref.get::<TrackNumber>().map(|it| { it.get() as i32 })),
                     album_artist.eq(tag_list_ref.get::<AlbumArtist>().map(|it| { it.get().to_owned() })),
+                    duration.eq(discoverer_info.duration().unwrap().nseconds() as i64),
                     collection_id.eq(collection.id),
                 )).execute(connection) {
                     None

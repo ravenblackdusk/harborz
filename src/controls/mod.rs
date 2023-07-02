@@ -14,7 +14,8 @@ use gtk::Orientation::{Horizontal, Vertical};
 use gtk::Align::Center;
 use log::warn;
 use once_cell::sync::Lazy;
-use crate::common::{box_builder, gtk_box};
+use util::format;
+use crate::common::{box_builder, gtk_box, util};
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
 use crate::controls::volume::volume_button;
@@ -43,11 +44,6 @@ impl Playable for Button {
     fn pause(&self) {
         self.change_state("media-playback-pause", "Pause");
     }
-}
-
-fn format(timestamp: u64) -> String {
-    let seconds = Duration::from_nanos(timestamp).as_secs();
-    format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
 const URI: &'static str = "uri";
