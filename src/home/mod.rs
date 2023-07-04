@@ -3,7 +3,6 @@ use std::rc::Rc;
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
 use gtk::{ColumnView, ColumnViewColumn, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::prelude::{Cast, CastNone, IsA, ObjectExt, StaticType, WidgetExt};
-use gtk::Align::Start;
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
 use gtk::pango::EllipsizeMode;
@@ -40,7 +39,8 @@ fn list_box<T: 'static, W: IsA<Widget>, S: Fn(Rc<T>) -> W + ?Sized + 'static, F:
 }
 
 fn or_none(string: Rc<Option<String>>) -> Label {
-    Label::builder().label(string.as_deref().unwrap_or("None")).halign(Start).build()
+    Label::builder().label(string.as_deref().unwrap_or("None"))
+        .hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build()
 }
 
 pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
