@@ -1,6 +1,6 @@
 use std::ops::Deref;
 use std::rc::Rc;
-use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl};
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use gtk::{ColumnView, ColumnViewColumn, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::prelude::{Cast, CastNone, IsA, ObjectExt, StaticType, WidgetExt};
 use gtk::gio::ListStore;
@@ -10,9 +10,9 @@ use crate::collection::model::Collection;
 use crate::collection::song::Song;
 use crate::common::util::{format, PathString};
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
+use crate::collection::song::get_current_album;
 use crate::db::get_connection;
-use crate::schema::collections::dsl::collections;
-use crate::schema::songs::{album, artist, track_number};
+use crate::schema::songs::{album, artist};
 use crate::schema::songs::dsl::songs;
 
 fn list_box<T: 'static, W: IsA<Widget>, S: Fn(Rc<T>) -> W + ?Sized + 'static, F: Fn(Rc<T>) + 'static>(
@@ -59,9 +59,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                     let media_controls = media_controls.clone();
                     move |album_string| {
                         list_box(&scrolled_window,
-                            songs.inner_join(collections).filter(artist.eq(&*artist_string).and(album.eq(&*album_string)))
-                                .order_by(track_number).get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
-                                .into_iter().map(Rc::new).collect::<Vec<_>>(),
+                            get_current_album(&*artist_string, &*album_string, &mut get_connection()).into_iter()
+                                .map(Rc::new).collect::<Vec<_>>(),
                             vec![
                                 (Box::new(|rc: Rc<(Song, Collection)>| {
                                     let (song, _) = &*rc;

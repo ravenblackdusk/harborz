@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
-use diesel::{insert_or_ignore_into, RunQueryDsl, ExpressionMethods, SqliteConnection};
+use diesel::{BoolExpressionMethods, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::result::Error;
 use gstreamer::ClockTime;
@@ -9,6 +9,7 @@ use gstreamer_pbutils::Discoverer;
 use once_cell::sync::Lazy;
 use walkdir::WalkDir;
 use crate::collection::model::Collection;
+use crate::schema::collections::table as collections;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::*;
 
@@ -79,4 +80,10 @@ pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sende
     }).filter_map(|result| { result.unwrap() }).max();
     sender.send(ImportProgress::CollectionEnd(collection.id, collection.path.to_owned())).unwrap();
     result
+}
+
+pub fn get_current_album(artist_string: &Option<String>, album_string: &Option<String>,
+    connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Vec<(Song, Collection)> {
+    songs.inner_join(collections).filter(artist.eq(artist_string).and(album.eq(album_string)))
+        .order_by((track_number, id)).get_results::<(Song, Collection)>(connection).unwrap()
 }

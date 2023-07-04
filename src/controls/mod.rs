@@ -2,7 +2,7 @@ mod volume;
 
 use std::path::PathBuf;
 use std::time::Duration;
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
+use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged};
@@ -14,7 +14,9 @@ use gtk::Orientation::{Horizontal, Vertical};
 use gtk::Align::Center;
 use log::warn;
 use once_cell::sync::Lazy;
+use song::get_current_album;
 use util::format;
+use crate::collection::song;
 use crate::common::{box_builder, gtk_box, util};
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
@@ -25,7 +27,7 @@ use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
-use crate::schema::songs::path as song_path;
+use crate::schema::songs::{album, artist, path as song_path};
 
 trait Playable {
     fn change_state(&self, icon: &str, tooltip: &str);
@@ -92,7 +94,7 @@ impl Playbin for Pipeline {
             self.seek_internal(
                 ((position as i64) + if delta_seconds >= 0 { delta_nanos } else { -delta_nanos })
                     .clamp(0, PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap() as i64) as u64,
-                &label, &scale
+                &label, &scale,
             ).unwrap();
         }
     }
@@ -185,6 +187,23 @@ pub fn media_controls() -> Wrapper {
             }
             None
         }
+    });
+    PLAYBIN.connect("about-to-finish", true, |_| {
+        get_connection().transaction(|connection| {
+            if let Ok((Some(current_song_id_int), artist_string, album_string)) = config.inner_join(songs)
+                .select((current_song_id, artist, album))
+                .get_result::<(Option<i32>, Option<String>, Option<String>)>(connection) {
+                let song_collections = get_current_album(&artist_string, &album_string, connection);
+                let next_song_index = song_collections.iter().position(|(song, _)| { song.id == current_song_id_int })
+                    .unwrap() + 1;
+                if next_song_index < song_collections.len() {
+                    let (next_song, next_collection) = &song_collections[next_song_index];
+                    PLAYBIN.set_uri(&next_collection.path.to_path().join(next_song.path.to_path()));
+                }
+            }
+            anyhow::Ok(())
+        }).unwrap();
+        None
     });
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();

@@ -27,7 +27,7 @@ fn main() -> Result<ExitCode> {
     application.connect_activate(|application| {
         let add_collection_box = add_collection_box();
         let media_controls = media_controls();
-        let title = Label::new(Some("Music player"));
+        let title = Label::new(Some("Harborz"));
         let bar = HeaderBar::builder().title_widget(&title).build();
         let collection_button = Button::builder().label("Collection").build();
         let menu = gtk_box(Vertical);
@@ -54,7 +54,7 @@ fn main() -> Result<ExitCode> {
             let scrolled_window = scrolled_window.clone();
             move |_| {
                 home::set_body(&scrolled_window, &media_controls);
-                title.set_label("Music player");
+                title.set_label("Harborz");
             }
         });
         bar.pack_start(&home_button);
