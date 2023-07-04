@@ -6,7 +6,7 @@ use diesel_migrations::{embed_migrations, EmbeddedMigrations};
 
 static CONNECTION: Lazy<Pool<ConnectionManager<SqliteConnection>>> = Lazy::new(|| {
     Pool::builder().test_on_check_out(true)
-        .build(ConnectionManager::<SqliteConnection>::new("music-player.sqlite")).unwrap()
+        .build(ConnectionManager::<SqliteConnection>::new("harborz.sqlite")).unwrap()
 });
 
 pub fn get_connection() -> PooledConnection<ConnectionManager<SqliteConnection>> {

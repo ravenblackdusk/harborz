@@ -23,7 +23,7 @@ fn main() -> Result<ExitCode> {
     std_logger::Config::logfmt().init();
     gstreamer::init()?;
     get_connection().run_pending_migrations(MIGRATIONS)?;
-    let application = Application::builder().application_id("eu.agoor.music-player").build();
+    let application = Application::builder().application_id("com.github.harborz").build();
     application.connect_activate(|application| {
         let add_collection_box = add_collection_box();
         let media_controls = media_controls();
