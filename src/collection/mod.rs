@@ -4,9 +4,10 @@ pub mod song;
 mod dialog;
 
 use std::collections::HashMap;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, TryRecvError};
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
+use TryRecvError::{Disconnected, Empty};
 use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
 use diesel::dsl::max;
 use diesel::prelude::*;
@@ -44,27 +45,30 @@ pub fn add_collection_box() -> gtk::Box {
                         timeout_add_local(Duration::from_millis(200), {
                             let collection_box = collection_box.clone();
                             move || {
-                                Continue(if let Ok(import_progress) = receiver.try_recv() {
-                                    match import_progress {
-                                        ImportProgress::CollectionStart(id) => {
-                                            last_id = Some(id);
-                                            let progress_bar = ProgressBar::builder().hexpand(true).build();
-                                            collection_box.append(&progress_bar);
-                                            progress_bar_map.insert(id, progress_bar);
-                                            true
+                                Continue(match receiver.try_recv() {
+                                    Err(Empty) => { true }
+                                    Err(Disconnected) => { false }
+                                    Ok(import_progress) => {
+                                        match import_progress {
+                                            ImportProgress::CollectionStart(id) => {
+                                                last_id = Some(id);
+                                                let progress_bar = ProgressBar::builder().hexpand(true).build();
+                                                collection_box.append(&progress_bar);
+                                                progress_bar_map.insert(id, progress_bar);
+                                                true
+                                            }
+                                            ImportProgress::Fraction(fraction) => {
+                                                progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
+                                                true
+                                            }
+                                            ImportProgress::CollectionEnd(id, collection_path) => {
+                                                collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
+                                                collection_box.add(id, &collection_path);
+                                                true
+                                            }
                                         }
-                                        ImportProgress::Fraction(fraction) => {
-                                            progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
-                                            true
-                                        }
-                                        ImportProgress::CollectionEnd(id, collection_path) => {
-                                            collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
-                                            collection_box.add(id, &collection_path);
-                                            true
-                                        }
-                                        ImportProgress::End => false
                                     }
-                                } else { false })
+                                })
                             }
                         });
                         let paths = files.iter::<File>().map(|file| { Some(file.unwrap().path()?.to_str()?.to_owned()) })
@@ -94,7 +98,6 @@ pub fn add_collection_box() -> gtk::Box {
                                         }
                                     }).unwrap();
                                 }
-                                sender.send(ImportProgress::End).unwrap();
                             }
                         });
                     }

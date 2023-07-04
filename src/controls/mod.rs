@@ -2,10 +2,10 @@ mod volume;
 
 use std::path::PathBuf;
 use std::time::Duration;
-use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, update};
+use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::timeout_add_local;
-use gstreamer::MessageView::{AsyncDone, DurationChanged};
+use gstreamer::MessageView::{AsyncDone, DurationChanged, StreamStart};
 use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, Inhibit, Label, Scale, ScrollType};
@@ -27,7 +27,7 @@ use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
-use crate::schema::songs::{album, artist, path as song_path};
+use crate::schema::songs::{album, artist, id, path as song_path};
 
 trait Playable {
     fn change_state(&self, icon: &str, tooltip: &str);
@@ -51,7 +51,7 @@ impl Playable for Button {
 const URI: &'static str = "uri";
 //noinspection SpellCheckingInspection
 static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
-    ElementFactory::make("playbin").build().unwrap().downcast::<Pipeline>().unwrap()
+    ElementFactory::make("playbin3").build().unwrap().downcast::<Pipeline>().unwrap()
 });
 
 //noinspection SpellCheckingInspection
@@ -172,9 +172,7 @@ pub fn media_controls() -> Wrapper {
     wrapper.connect_local(SONG_SELECTED, true, {
         let scale = scale.clone();
         move |params| {
-            if let [_, song_id, current_song_path, collection_path] = &params {
-                update(config).set(current_song_id.eq(song_id.get::<i32>().unwrap())).execute(&mut get_connection())
-                    .unwrap();
+            if let [_, current_song_path, collection_path] = &params {
                 let playing = PLAYBIN.current_state() == Playing;
                 if playing { PLAYBIN.set_state(Null).unwrap(); }
                 PLAYBIN.set_uri(&collection_path.get::<String>().unwrap().to_path()
@@ -208,11 +206,20 @@ pub fn media_controls() -> Wrapper {
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
         move |_, message| {
-            if let AsyncDone(_) | DurationChanged(_) = message.view() {
-                if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
-                    duration_label.set_label(&format(duration));
-                    scale.set_range(0.0, duration as f64);
+            match message.view() {
+                AsyncDone(_) | DurationChanged(_) => {
+                    if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
+                        duration_label.set_label(&format(duration));
+                        scale.set_range(0.0, duration as f64);
+                    }
                 }
+                StreamStart(_) => {
+                    update(config).set(current_song_id.eq(
+                        collections.inner_join(songs).select(id).filter(path.concat("/").concat(song_path)
+                            .eq(&PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */])).single_value()
+                    )).execute(&mut get_connection()).unwrap();
+                }
+                _ => {}
             }
             Continue(true)
         }

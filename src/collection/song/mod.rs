@@ -1,4 +1,5 @@
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use diesel::{BoolExpressionMethods, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
@@ -6,6 +7,7 @@ use diesel::result::Error;
 use gstreamer::ClockTime;
 use gstreamer::tags::{Album, AlbumArtist, Artist, DateTime, Genre, Title, TrackNumber};
 use gstreamer_pbutils::Discoverer;
+use gtk::glib::{Continue, timeout_add};
 use once_cell::sync::Lazy;
 use walkdir::WalkDir;
 use crate::collection::model::Collection;
@@ -36,17 +38,24 @@ pub(in crate::collection) enum ImportProgress {
     CollectionStart(i32),
     Fraction(f64),
     CollectionEnd(i32, String),
-    End,
 }
 
 pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Option<SystemTime> {
     sender.send(ImportProgress::CollectionStart(collection.id)).unwrap();
     let total = WalkDir::new(&collection.path).into_iter().count() as f64;
-    let mut count = 0.0;
+    let count = Arc::new(Mutex::new(0.0));
+    timeout_add(Duration::from_millis(200), {
+        let sender = sender.clone();
+        let count = count.clone();
+        move || {
+            let count = count.lock().unwrap();
+            sender.send(ImportProgress::Fraction(*count / total)).unwrap();
+            Continue(*count < total)
+        }
+    });
     let result = WalkDir::new(&collection.path).into_iter().filter_map(|entry_result| {
-        count += 1.0;
-        sender.send(ImportProgress::Fraction(count / total)).unwrap();
+        *count.lock().unwrap() += 1.0;
         let entry = entry_result.unwrap();
         entry.file_type().is_file().then_some(entry)
     }).map(|entry| -> anyhow::Result<_> {

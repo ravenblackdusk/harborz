@@ -36,7 +36,7 @@ impl ObjectSubclass for Wrapper {
 }
 
 static SIGNALS: Lazy<Vec<Signal>> = Lazy::new(|| {
-    vec![Signal::builder(SONG_SELECTED).param_types([i32::static_type(), String::static_type(), String::static_type()]).build()]
+    vec![Signal::builder(SONG_SELECTED).param_types([String::static_type(), String::static_type()]).build()]
 });
 
 impl ObjectImpl for Wrapper {

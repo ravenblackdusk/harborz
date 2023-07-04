@@ -81,7 +81,7 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                                 let media_controls = media_controls.clone();
                                 move |rc| {
                                     let (song, collection) = &*rc;
-                                    media_controls.emit_by_name::<()>(SONG_SELECTED, &[&song.id, &song.path, &collection.path]);
+                                    media_controls.emit_by_name::<()>(SONG_SELECTED, &[&song.path, &collection.path]);
                                 }
                             },
                         );
