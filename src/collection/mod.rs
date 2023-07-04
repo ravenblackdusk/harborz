@@ -53,10 +53,6 @@ pub fn add_collection_box() -> gtk::Box {
                                             progress_bar_map.insert(id, progress_bar);
                                             true
                                         }
-                                        ImportProgress::Pulse => {
-                                            progress_bar_map[&last_id.unwrap()].pulse();
-                                            true
-                                        }
                                         ImportProgress::Fraction(fraction) => {
                                             progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
                                             true

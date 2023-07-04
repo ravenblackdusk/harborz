@@ -33,7 +33,6 @@ static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::
 
 pub(in crate::collection) enum ImportProgress {
     CollectionStart(i32),
-    Pulse,
     Fraction(f64),
     CollectionEnd(i32, String),
     End,
@@ -42,12 +41,7 @@ pub(in crate::collection) enum ImportProgress {
 pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Option<SystemTime> {
     sender.send(ImportProgress::CollectionStart(collection.id)).unwrap();
-    let mut total = 0;
-    for _ in WalkDir::new(&collection.path) {
-        total += 1;
-        sender.send(ImportProgress::Pulse).unwrap();
-    }
-    let total = total as f64;
+    let total = WalkDir::new(&collection.path).into_iter().count() as f64;
     let mut count = 0.0;
     let result = WalkDir::new(&collection.path).into_iter().filter_map(|entry_result| {
         count += 1.0;
