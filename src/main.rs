@@ -16,6 +16,7 @@ use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
 use crate::collection::add_collection_box;
 use crate::common::{box_builder, gtk_box};
+use crate::common::constant::APP_ID;
 use crate::controls::media_controls;
 use crate::db::get_connection;
 
@@ -23,7 +24,7 @@ fn main() -> Result<ExitCode> {
     std_logger::Config::logfmt().init();
     gstreamer::init()?;
     get_connection().run_pending_migrations(MIGRATIONS)?;
-    let application = Application::builder().application_id("com.github.harborz").build();
+    let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(|application| {
         let add_collection_box = add_collection_box();
         let media_controls = media_controls();
