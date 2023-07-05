@@ -13,11 +13,13 @@ use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use gtk::Orientation::{Horizontal, Vertical};
 use gtk::Align::Center;
 use log::warn;
-use mpris_player::{MprisPlayer, PlaybackStatus};
+use mpris_player::{Metadata, MprisPlayer, PlaybackStatus};
 use once_cell::sync::Lazy;
 use song::get_current_album;
 use util::format;
+use crate::collection::model::Collection;
 use crate::collection::song;
+use crate::collection::song::Song;
 use crate::common::{box_builder, gtk_box, util};
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
@@ -28,7 +30,7 @@ use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
-use crate::schema::songs::{album, artist, id, path as song_path};
+use crate::schema::songs::{album, artist, path as song_path};
 use crate::common::constant::APP_ID;
 
 trait Playable {
@@ -61,7 +63,7 @@ trait Playbin {
     fn set_uri(&self, uri: &PathBuf);
     fn get_position(&self) -> Option<u64>;
     fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()>;
-    fn simple_seek(&self, delta_seconds: i64, label: &Label, scale: &Scale);
+    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, scale: &Scale);
 }
 
 impl Playbin for Pipeline {
@@ -76,11 +78,11 @@ impl Playbin for Pipeline {
         label.set_label(&format(value));
         Ok(scale.set_value(value as f64))
     }
-    fn simple_seek(&self, delta_seconds: i64, label: &Label, scale: &Scale) {
+    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, scale: &Scale) {
         if let Some(position) = self.get_position() {
-            let delta_nanos = Duration::from_secs(delta_seconds.abs() as u64).as_nanos() as i64;
+            let nanos = duration.as_nanos() as i64;
             self.seek_internal(
-                ((position as i64) + if delta_seconds >= 0 { delta_nanos } else { -delta_nanos })
+                ((position as i64) + if forward { nanos } else { -nanos })
                     .clamp(0, PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap() as i64) as u64,
                 &label, &scale,
             ).unwrap();
@@ -88,20 +90,20 @@ impl Playbin for Pipeline {
     }
 }
 
-fn go_next_song() {
+fn go_delta_song(delta: i32, now: bool) {
     get_connection().transaction(|connection| {
         if let Ok((Some(current_song_id_int), artist_string, album_string)) = config.inner_join(songs)
             .select((current_song_id, artist, album))
             .get_result::<(Option<i32>, Option<String>, Option<String>)>(connection) {
             let song_collections = get_current_album(&artist_string, &album_string, connection);
-            let next_song_index = song_collections.iter().position(|(song, _)| { song.id == current_song_id_int })
-                .unwrap() + 1;
-            if next_song_index < song_collections.len() {
-                let (next_song, next_collection) = &song_collections[next_song_index];
+            let delta_song_index = song_collections.iter().position(|(song, _)| { song.id == current_song_id_int })
+                .unwrap() as i32 + delta;
+            if delta_song_index >= 0 && delta_song_index < song_collections.len() as i32 {
+                let (delta_song, delta_collection) = &song_collections[delta_song_index as usize];
                 let playing = PLAYBIN.current_state() == Playing;
-                PLAYBIN.set_state(Null).unwrap();
-                PLAYBIN.set_uri(&next_collection.path.to_path().join(next_song.path.to_path()));
-                if playing { PLAYBIN.set_state(Playing).unwrap(); }
+                if now { PLAYBIN.set_state(Null).unwrap(); }
+                PLAYBIN.set_uri(&delta_collection.path.to_path().join(delta_song.path.to_path()));
+                if now && playing { PLAYBIN.set_state(Playing).unwrap(); }
             }
         }
         anyhow::Ok(())
@@ -119,8 +121,8 @@ pub fn media_controls() -> Wrapper {
     mpris_player.set_can_control(false);
     mpris_player.set_can_raise(false);
     mpris_player.set_can_play(true);
-    mpris_player.set_can_pause(false);
-    mpris_player.set_can_seek(false);
+    mpris_player.set_can_pause(true);
+    mpris_player.set_can_seek(true);
     mpris_player.set_can_go_next(true);
     mpris_player.set_can_go_previous(true);
     mpris_player.set_can_set_fullscreen(false);
@@ -137,12 +139,13 @@ pub fn media_controls() -> Wrapper {
     position_box.append(&scale);
     position_box.append(&duration_label);
     let skip_backward = Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build();
+    skip_backward.connect_clicked(|_| { go_delta_song(-1, true); });
     control_box.append(&skip_backward);
     let seek_backward = Button::builder().icon_name("media-seek-backward").tooltip_text("Seek 10s backward").build();
     seek_backward.connect_clicked({
         let position_label = position_label.clone();
         let scale = scale.clone();
-        move |_| { PLAYBIN.simple_seek(-10, &position_label, &scale); }
+        move |_| { PLAYBIN.simple_seek(Duration::from_secs(10), false, &position_label, &scale); }
     });
     control_box.append(&seek_backward);
     control_box.append(&play_pause);
@@ -150,11 +153,11 @@ pub fn media_controls() -> Wrapper {
     seek_forward.connect_clicked({
         let position_label = position_label.clone();
         let scale = scale.clone();
-        move |_| { PLAYBIN.simple_seek(30, &position_label, &scale); }
+        move |_| { PLAYBIN.simple_seek(Duration::from_secs(30), true, &position_label, &scale); }
     });
     control_box.append(&seek_forward);
     let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build();
-    skip_forward.connect_clicked(|_| { go_next_song(); });
+    skip_forward.connect_clicked(|_| { go_delta_song(1, true); });
     control_box.append(&skip_forward);
     control_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
     controls.append(&position_box);
@@ -201,8 +204,18 @@ pub fn media_controls() -> Wrapper {
         }
     });
     mpris_player.connect_play_pause(move || { play_pause.emit_clicked(); });
+    mpris_player.connect_next(|| { go_delta_song(1, true) });
+    mpris_player.connect_previous(|| { go_delta_song(-1, true) });
+    mpris_player.connect_seek({
+        let position_label = position_label.clone();
+        let scale = scale.clone();
+        move |delta_micros| {
+            PLAYBIN.simple_seek(Duration::from_micros(delta_micros.abs() as u64), delta_micros >= 0, &position_label,
+                &scale);
+        }
+    });
     PLAYBIN.connect("about-to-finish", true, move |_| {
-        go_next_song();
+        go_delta_song(1, false);
         None
     });
     PLAYBIN.bus().unwrap().add_watch_local({
@@ -236,10 +249,28 @@ pub fn media_controls() -> Wrapper {
                     }
                 }
                 StreamStart(_) => {
-                    update(config).set(current_song_id.eq(
-                        collections.inner_join(songs).select(id).filter(path.concat("/").concat(song_path)
-                            .eq(&PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */])).single_value()
-                    )).execute(&mut get_connection()).unwrap();
+                    let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
+                    get_connection().transaction(|connection| {
+                        let (_, song) = collections.inner_join(songs)
+                            .filter(path.concat("/").concat(song_path).eq(uri))
+                            .get_result::<(Collection, Song)>(connection)?;
+                        update(config).set(current_song_id.eq(song.id)).execute(connection)?;
+                        mpris_player.set_metadata(Metadata {
+                            length: Some(song.duration),
+                            art_url: None,
+                            album: song.album,
+                            album_artist: song.album_artist.map(|it| { vec![it] }),
+                            artist: song.artist.map(|it| { vec![it] }),
+                            composer: None,
+                            disc_number: None,
+                            genre: song.genre.map(|it| { vec![it] }),
+                            title: song.title.or(song.path.to_path().file_name().unwrap().to_str()
+                                .map(|it| { it.to_string() })),
+                            track_number: song.track_number,
+                            url: Some(uri.to_string()),
+                        });
+                        anyhow::Ok(())
+                    }).unwrap();
                 }
                 _ => {}
             }
