@@ -16,7 +16,7 @@ use crate::collection::model::Collection;
 use crate::collection::song::Song;
 use crate::common::{gtk_box, util};
 use crate::common::util::PathString;
-use crate::common::wrapper::{SONG_SELECTED, Wrapper};
+use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::controls::mpris::mpris_player;
 use crate::controls::playbin::{go_delta_song, PLAYBIN, Playbin, URI};
 use crate::controls::volume::volume_button;
@@ -154,6 +154,7 @@ pub fn media_controls() -> Wrapper {
     });
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
+        let wrapper = wrapper.clone();
         move |_, message| {
             match message.view() {
                 StateChanged(state_changed) => {
@@ -191,6 +192,7 @@ pub fn media_controls() -> Wrapper {
                             .filter(path.concat("/").concat(song_path).eq(uri))
                             .get_result::<(Collection, Song)>(connection)?;
                         update(config).set(current_song_id.eq(song.id)).execute(connection)?;
+                        wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
                         mpris_player.set_metadata(Metadata {
                             length: Some(song.duration),
                             art_url: None,
