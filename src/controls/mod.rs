@@ -203,15 +203,27 @@ pub fn media_controls() -> Wrapper {
             None
         }
     });
-    mpris_player.connect_play_pause(move || { play_pause.emit_clicked(); });
+    mpris_player.connect_play_pause({
+        let play_pause = play_pause.clone();
+        move || { play_pause.emit_clicked(); }
+    });
+    mpris_player.connect_play({
+        let play_pause = play_pause.clone();
+        move || { if PLAYBIN.current_state() != Playing { play_pause.emit_clicked(); } }
+    });
+    mpris_player.connect_pause(move || { if PLAYBIN.current_state() != Paused { play_pause.emit_clicked(); } });
+    mpris_player.connect_stop(move || {
+        PLAYBIN.set_uri(&PathBuf::from(""));
+        PLAYBIN.set_state(Null).unwrap();
+    });
     mpris_player.connect_next(|| { go_delta_song(1, true) });
     mpris_player.connect_previous(|| { go_delta_song(-1, true) });
     mpris_player.connect_seek({
         let position_label = position_label.clone();
         let scale = scale.clone();
         move |delta_micros| {
-            PLAYBIN.simple_seek(Duration::from_micros(delta_micros.abs() as u64), delta_micros >= 0, &position_label,
-                &scale);
+            PLAYBIN.simple_seek(Duration::from_micros(delta_micros.abs() as u64), delta_micros >= 0,
+                &position_label, &scale);
         }
     });
     PLAYBIN.connect("about-to-finish", true, move |_| {
@@ -229,10 +241,12 @@ pub fn media_controls() -> Wrapper {
                             timeout_add_local(Duration::from_millis(200), {
                                 let position_label = position_label.clone();
                                 let scale = scale.clone();
+                                let mpris_player = mpris_player.clone();
                                 move || {
                                     if let Some(position) = PLAYBIN.get_position() {
                                         position_label.set_label(&format(position));
                                         scale.set_value(position as f64);
+                                        mpris_player.set_position(position as i64);
                                     }
                                     Continue(PLAYBIN.current_state() == Playing || PLAYBIN.pending_state() == Playing)
                                 }
