@@ -1,37 +1,36 @@
-mod volume;
-
-use std::path::PathBuf;
 use std::time::Duration;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
-use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
+use gstreamer::ClockTime;
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
-use gstreamer::prelude::{Cast, Continue, ElementExt, ElementExtManual, ObjectExt};
+use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, Inhibit, Label, Scale, ScrollType};
-use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
-use gtk::Orientation::{Horizontal, Vertical};
 use gtk::Align::Center;
+use gtk::Orientation::{Horizontal, Vertical};
+use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use log::warn;
-use mpris_player::{Metadata, MprisPlayer, PlaybackStatus};
-use once_cell::sync::Lazy;
-use song::get_current_album;
+use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
 use crate::collection::model::Collection;
-use crate::collection::song;
 use crate::collection::song::Song;
 use crate::common::{box_builder, gtk_box, util};
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
+use crate::controls::mpris::mpris_player;
+use crate::controls::playbin::{go_delta_song, PLAYBIN, Playbin, URI};
 use crate::controls::volume::volume_button;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
+use crate::schema::songs::path as song_path;
 use crate::schema::songs::dsl::songs;
-use crate::schema::songs::{album, artist, path as song_path};
-use crate::common::constant::APP_ID;
+
+mod volume;
+mod playbin;
+mod mpris;
 
 trait Playable {
     fn change_state(&self, icon: &str, tooltip: &str);
@@ -52,80 +51,8 @@ impl Playable for Button {
     }
 }
 
-const URI: &'static str = "uri";
-//noinspection SpellCheckingInspection
-static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
-    ElementFactory::make("playbin3").build().unwrap().downcast::<Pipeline>().unwrap()
-});
-
-//noinspection SpellCheckingInspection
-trait Playbin {
-    fn set_uri(&self, uri: &PathBuf);
-    fn get_position(&self) -> Option<u64>;
-    fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()>;
-    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, scale: &Scale);
-}
-
-impl Playbin for Pipeline {
-    fn set_uri(&self, uri: &PathBuf) {
-        self.set_property(URI, format!("file:{}", uri.to_str().unwrap()));
-    }
-    fn get_position(&self) -> Option<u64> {
-        PLAYBIN.query_position().map(ClockTime::nseconds)
-    }
-    fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()> {
-        self.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value))?;
-        label.set_label(&format(value));
-        Ok(scale.set_value(value as f64))
-    }
-    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, scale: &Scale) {
-        if let Some(position) = self.get_position() {
-            let nanos = duration.as_nanos() as i64;
-            self.seek_internal(
-                ((position as i64) + if forward { nanos } else { -nanos })
-                    .clamp(0, PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap() as i64) as u64,
-                &label, &scale,
-            ).unwrap();
-        }
-    }
-}
-
-fn go_delta_song(delta: i32, now: bool) {
-    get_connection().transaction(|connection| {
-        if let Ok((Some(current_song_id_int), artist_string, album_string)) = config.inner_join(songs)
-            .select((current_song_id, artist, album))
-            .get_result::<(Option<i32>, Option<String>, Option<String>)>(connection) {
-            let song_collections = get_current_album(&artist_string, &album_string, connection);
-            let delta_song_index = song_collections.iter().position(|(song, _)| { song.id == current_song_id_int })
-                .unwrap() as i32 + delta;
-            if delta_song_index >= 0 && delta_song_index < song_collections.len() as i32 {
-                let (delta_song, delta_collection) = &song_collections[delta_song_index as usize];
-                let playing = PLAYBIN.current_state() == Playing;
-                if now { PLAYBIN.set_state(Null).unwrap(); }
-                PLAYBIN.set_uri(&delta_collection.path.to_path().join(delta_song.path.to_path()));
-                if now && playing { PLAYBIN.set_state(Playing).unwrap(); }
-            }
-        }
-        anyhow::Ok(())
-    }).unwrap();
-}
-
 pub fn media_controls() -> Wrapper {
-    let path_buf = songs.inner_join(collections).inner_join(config).select((path, song_path))
-        .get_result::<(String, String)>(&mut get_connection()).map(|(collection_path, current_song_path)| {
-        collection_path.to_path().join(current_song_path.to_path())
-    }).unwrap_or(PathBuf::from(""));
-    PLAYBIN.set_uri(&path_buf);
-    let mpris_player = MprisPlayer::new("harborz".to_string(), "Harborz".to_string(), APP_ID.to_string());
-    mpris_player.set_can_quit(false);
-    mpris_player.set_can_control(false);
-    mpris_player.set_can_raise(false);
-    mpris_player.set_can_play(true);
-    mpris_player.set_can_pause(true);
-    mpris_player.set_can_seek(true);
-    mpris_player.set_can_go_next(true);
-    mpris_player.set_can_go_previous(true);
-    mpris_player.set_can_set_fullscreen(false);
+    let mpris_player = mpris_player();
     let play_pause = Button::new();
     play_pause.play();
     let position_label = Label::new(Some(&format(0)));
@@ -212,12 +139,6 @@ pub fn media_controls() -> Wrapper {
         move || { if PLAYBIN.current_state() != Playing { play_pause.emit_clicked(); } }
     });
     mpris_player.connect_pause(move || { if PLAYBIN.current_state() != Paused { play_pause.emit_clicked(); } });
-    mpris_player.connect_stop(move || {
-        PLAYBIN.set_uri(&PathBuf::from(""));
-        PLAYBIN.set_state(Null).unwrap();
-    });
-    mpris_player.connect_next(|| { go_delta_song(1, true) });
-    mpris_player.connect_previous(|| { go_delta_song(-1, true) });
     mpris_player.connect_seek({
         let position_label = position_label.clone();
         let scale = scale.clone();
