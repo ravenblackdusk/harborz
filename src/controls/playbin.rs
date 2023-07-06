@@ -16,8 +16,8 @@ use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::{album, artist};
-use crate::schema::songs::path as song_path;
 use crate::schema::songs::dsl::songs;
+use crate::schema::songs::path as song_path;
 
 pub(in crate::controls) const URI: &'static str = "uri";
 
@@ -28,6 +28,10 @@ pub(in crate::controls) static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
         collection_path.to_path().join(current_song_path.to_path())
     }).unwrap_or(PathBuf::from(""));
     playbin.set_uri(&path_buf);
+    playbin.connect("about-to-finish", true, |_| {
+        go_delta_song(1, false);
+        None
+    });
     playbin
 });
 

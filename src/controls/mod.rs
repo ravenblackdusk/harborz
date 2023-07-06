@@ -150,10 +150,6 @@ pub fn media_controls() -> Wrapper {
                 &position_label, &scale);
         }
     });
-    PLAYBIN.connect("about-to-finish", true, move |_| {
-        go_delta_song(1, false);
-        None
-    });
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
         move |_, message| {
