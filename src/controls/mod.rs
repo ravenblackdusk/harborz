@@ -7,8 +7,9 @@ use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, Inhibit, Label, Scale, ScrollType};
 use gtk::Align::Center;
+use gtk::gdk::SeatCapabilities;
 use gtk::Orientation::{Horizontal, Vertical};
-use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, DisplayExt, RangeExt, SeatExt, WidgetExt};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
@@ -25,8 +26,8 @@ use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
-use crate::schema::songs::path as song_path;
 use crate::schema::songs::dsl::songs;
+use crate::schema::songs::path as song_path;
 
 mod volume;
 mod playbin;
@@ -86,7 +87,9 @@ pub fn media_controls() -> Wrapper {
     let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build();
     skip_forward.connect_clicked(|_| { go_delta_song(1, true); });
     control_box.append(&skip_forward);
-    control_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
+    if !control_box.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
+        control_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
+    }
     controls.append(&position_box);
     controls.append(&control_box);
     play_pause.connect_clicked(move |play_pause| {
