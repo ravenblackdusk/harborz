@@ -5,17 +5,16 @@ use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, Inhibit, Label, Scale, ScrollType};
-use gtk::Align::Center;
+use gtk::{Button, Grid, Inhibit, Label, Scale, ScrollType};
 use gtk::gdk::SeatCapabilities;
 use gtk::Orientation::{Horizontal, Vertical};
-use gtk::prelude::{BoxExt, ButtonExt, DisplayExt, RangeExt, SeatExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, DisplayExt, GridExt, RangeExt, SeatExt, WidgetExt};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
 use crate::collection::model::Collection;
 use crate::collection::song::Song;
-use crate::common::{box_builder, gtk_box, util};
+use crate::common::{gtk_box, util};
 use crate::common::util::PathString;
 use crate::common::wrapper::{SONG_SELECTED, Wrapper};
 use crate::controls::mpris::mpris_player;
@@ -54,7 +53,7 @@ impl Playable for Button {
 
 pub fn media_controls() -> Wrapper {
     let mpris_player = mpris_player();
-    let play_pause = Button::new();
+    let play_pause = Button::builder().hexpand(true).build();
     play_pause.play();
     let position_label = Label::new(Some(&format(0)));
     let scale = Scale::builder().hexpand(true).build();
@@ -62,36 +61,39 @@ pub fn media_controls() -> Wrapper {
     let duration_label = Label::new(Some(&format(0)));
     let controls = gtk_box(Vertical);
     let position_box = gtk_box(Horizontal);
-    let control_box = box_builder().orientation(Horizontal).halign(Center).build();
+    let control_grid = Grid::builder().build();
     position_box.append(&position_label);
     position_box.append(&scale);
     position_box.append(&duration_label);
-    let skip_backward = Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").build();
+    let skip_backward = Button::builder().icon_name("media-skip-backward").tooltip_text("Previous")
+        .hexpand(true).build();
     skip_backward.connect_clicked(|_| { go_delta_song(-1, true); });
-    control_box.append(&skip_backward);
-    let seek_backward = Button::builder().icon_name("media-seek-backward").tooltip_text("Seek 10s backward").build();
+    control_grid.attach(&skip_backward, 0, 0, 2, 1);
+    let seek_backward = Button::builder().icon_name("media-seek-backward").tooltip_text("Seek 10s backward")
+        .hexpand(true).build();
     seek_backward.connect_clicked({
         let position_label = position_label.clone();
         let scale = scale.clone();
         move |_| { PLAYBIN.simple_seek(Duration::from_secs(10), false, &position_label, &scale); }
     });
-    control_box.append(&seek_backward);
-    control_box.append(&play_pause);
-    let seek_forward = Button::builder().icon_name("media-seek-forward").tooltip_text("Seek 30s forward").build();
+    control_grid.attach(&seek_backward, 2, 0, 1, 1);
+    control_grid.attach(&play_pause, 3, 0, 3, 1);
+    let seek_forward = Button::builder().icon_name("media-seek-forward").tooltip_text("Seek 30s forward")
+        .hexpand(true).build();
     seek_forward.connect_clicked({
         let position_label = position_label.clone();
         let scale = scale.clone();
         move |_| { PLAYBIN.simple_seek(Duration::from_secs(30), true, &position_label, &scale); }
     });
-    control_box.append(&seek_forward);
-    let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").build();
+    control_grid.attach(&seek_forward, 6, 0, 1, 1);
+    let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").hexpand(true).build();
     skip_forward.connect_clicked(|_| { go_delta_song(1, true); });
-    control_box.append(&skip_forward);
-    if !control_box.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
-        control_box.append(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }));
+    control_grid.attach(&skip_forward, 7, 0, 2, 1);
+    if !control_grid.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
+        control_grid.attach(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }), 9, 0, 1, 1);
     }
     controls.append(&position_box);
-    controls.append(&control_box);
+    controls.append(&control_grid);
     play_pause.connect_clicked(move |play_pause| {
         if PLAYBIN.current_state() == Playing {
             PLAYBIN.set_state(Paused).unwrap();
