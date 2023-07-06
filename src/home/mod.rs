@@ -68,11 +68,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                                     let id = song.id;
                                     list_item.set_child(Some(&image));
                                     wrapper.connect_local(STREAM_STARTED, true, move |params| {
-                                        image.set_icon_name(if id == params[1].get::<i32>().unwrap() {
-                                            Some("media-playback-start")
-                                        } else {
-                                            None
-                                        });
+                                        image.set_icon_name((id == params[1].get::<i32>().unwrap())
+                                            .then_some("media-playback-start"));
                                         None
                                     });
                                 }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
