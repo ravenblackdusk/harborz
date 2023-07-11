@@ -64,7 +64,7 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                             vec![
                                 (Box::new(|rc: Rc<(Wrapper, Song, Collection)>, list_item: &ListItem| {
                                     let (wrapper, song, _) = &*rc;
-                                    let image = Image::new();
+                                    let image = Image::builder().width_request(4).build();
                                     let id = song.id;
                                     list_item.set_child(Some(&image));
                                     wrapper.connect_local(STREAM_STARTED, true, move |params| {

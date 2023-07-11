@@ -15,7 +15,7 @@ use gtk::glib::ExitCode;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
 use crate::collection::add_collection_box;
-use crate::common::{box_builder, gtk_box};
+use crate::common::gtk_box;
 use crate::common::constant::APP_ID;
 use crate::controls::media_controls;
 use crate::db::get_connection;
@@ -35,7 +35,7 @@ fn main() -> Result<ExitCode> {
         menu.append(&collection_button);
         let menu_button = MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build();
-        let main_box = box_builder().orientation(Vertical).valign(Fill).build();
+        let main_box = Box::builder().spacing(4).orientation(Vertical).valign(Fill).build();
         let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
         home::set_body(&scrolled_window, &media_controls);
         main_box.append(&scrolled_window);
