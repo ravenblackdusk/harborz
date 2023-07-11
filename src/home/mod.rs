@@ -21,7 +21,8 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
     for row_item in row_items.iter() {
         store.append(&BoxedAnyObject::new(row_item.clone()));
     }
-    let column_view = ColumnView::builder().single_click_activate(true).model(&NoSelection::new(Some(store))).build();
+    let column_view = ColumnView::builder().single_click_activate(true).model(&NoSelection::new(Some(store)))
+        .show_row_separators(true).build();
     column_view.first_child().unwrap().set_visible(false);
     column_view.connect_activate(move |_, row| { on_row_activated(row_items[row as usize].clone()); });
     for (set_child, expand) in columns {
@@ -38,7 +39,7 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
 }
 
 fn or_none(string: Rc<Option<String>>, list_item: &ListItem) {
-    list_item.set_child(Some(&Label::builder().label(string.as_deref().unwrap_or("None"))
+    list_item.set_child(Some(&Label::builder().label(string.as_deref().unwrap_or("None")).margin_start(4).margin_end(4)
         .hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build()));
 }
 
