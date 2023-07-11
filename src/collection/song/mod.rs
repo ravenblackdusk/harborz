@@ -11,6 +11,7 @@ use gtk::glib::{Continue, timeout_add};
 use once_cell::sync::Lazy;
 use walkdir::WalkDir;
 use crate::collection::model::Collection;
+use crate::common::util::PathString;
 use crate::schema::collections::table as collections;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::*;
@@ -30,6 +31,12 @@ pub struct Song {
     pub track_number: Option<i32>,
     pub album_artist: Option<String>,
     pub duration: i64,
+}
+
+impl Song {
+    pub fn title_str(&self) -> &str {
+        self.title.as_deref().unwrap_or(self.path.to_path().file_name().unwrap().to_str().unwrap())
+    }
 }
 
 static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(30)).unwrap() });

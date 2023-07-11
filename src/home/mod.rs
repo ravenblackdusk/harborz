@@ -9,7 +9,8 @@ use gtk::prelude::{Cast, CastNone, ObjectExt, StaticType, WidgetExt};
 use crate::collection::model::Collection;
 use crate::collection::song::get_current_album;
 use crate::collection::song::Song;
-use crate::common::util::{format, PathString};
+use crate::common::util;
+use crate::common::util::format;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::db::get_connection;
 use crate::schema::songs::{album, artist};
@@ -39,7 +40,7 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
 }
 
 fn or_none(string: Rc<Option<String>>, list_item: &ListItem) {
-    list_item.set_child(Some(&Label::builder().label(string.as_deref().unwrap_or("None")).margin_start(4).margin_end(4)
+    list_item.set_child(Some(&Label::builder().label(util::or_none(&*string)).margin_start(4).margin_end(4)
         .hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build()));
 }
 
@@ -81,11 +82,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, media_controls: &Wrapper) {
                                 }), false),
                                 (Box::new(|rc, list_item| {
                                     let (_, song, _) = &*rc;
-                                    list_item.set_child(Some(&Label::builder().label(
-                                        song.title.as_deref().unwrap_or(song.path.to_path().file_name().unwrap()
-                                            .to_str().unwrap())
-                                    ).hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End)
-                                        .build()));
+                                    list_item.set_child(Some(&Label::builder().label(song.title_str()).hexpand(true)
+                                        .xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build()));
                                 }), true),
                                 (Box::new(|rc, list_item| {
                                     let (_, song, _) = &*rc;

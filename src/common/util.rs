@@ -15,3 +15,7 @@ pub fn format(timestamp: u64) -> String {
     let seconds = Duration::from_nanos(timestamp).as_secs();
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
+
+pub fn or_none(string: &Option<String>) -> &str {
+    string.as_deref().unwrap_or("None")
+}

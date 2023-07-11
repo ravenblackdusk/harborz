@@ -15,7 +15,7 @@ use util::format;
 use crate::collection::model::Collection;
 use crate::collection::song::Song;
 use crate::common::{gtk_box, util};
-use crate::common::util::PathString;
+use crate::common::util::{or_none, PathString};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::controls::mpris::mpris_player;
 use crate::controls::playbin::{go_delta_song, PLAYBIN, Playbin, URI};
@@ -53,6 +53,11 @@ impl Playable for Button {
 
 pub fn media_controls() -> Wrapper {
     let mpris_player = mpris_player();
+    let now_playing_box = gtk::Box::builder().orientation(Vertical).spacing(4).build();
+    let artist_label = Label::new(None);
+    now_playing_box.append(&artist_label);
+    let song_label = Label::new(None);
+    now_playing_box.append(&song_label);
     let play_pause = Button::builder().hexpand(true).build();
     play_pause.play();
     let position_label = Label::new(Some(&format(0)));
@@ -92,6 +97,7 @@ pub fn media_controls() -> Wrapper {
     if !control_grid.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
         control_grid.attach(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }), 9, 0, 1, 1);
     }
+    controls.append(&now_playing_box);
     controls.append(&position_box);
     controls.append(&control_grid);
     play_pause.connect_clicked(move |play_pause| {
@@ -192,6 +198,9 @@ pub fn media_controls() -> Wrapper {
                             .filter(path.concat("/").concat(song_path).eq(uri))
                             .get_result::<(Collection, Song)>(connection)?;
                         update(config).set(current_song_id.eq(song.id)).execute(connection)?;
+                        artist_label.set_label(or_none(&song.artist));
+                        let title = song.title_str().to_owned();
+                        song_label.set_label(&title);
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
                         mpris_player.set_metadata(Metadata {
                             length: Some(song.duration),
@@ -202,8 +211,7 @@ pub fn media_controls() -> Wrapper {
                             composer: None,
                             disc_number: None,
                             genre: song.genre.map(|it| { vec![it] }),
-                            title: song.title.or(song.path.to_path().file_name().unwrap().to_str()
-                                .map(|it| { it.to_string() })),
+                            title: Some(title),
                             track_number: song.track_number,
                             url: Some(uri.to_string()),
                         });
