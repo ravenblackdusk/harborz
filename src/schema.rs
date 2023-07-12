@@ -13,6 +13,8 @@ diesel::table! {
     config (volume) {
         volume -> Float,
         current_song_id -> Nullable<Integer>,
+        window_width -> Integer,
+        window_height -> Integer,
     }
 }
 

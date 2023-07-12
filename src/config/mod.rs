@@ -6,4 +6,6 @@ use diesel::prelude::*;
 pub struct Config {
     pub volume: f32,
     pub current_song_id: Option<i32>,
+    pub window_width: i32,
+    pub window_height: i32,
 }
