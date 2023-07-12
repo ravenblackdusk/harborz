@@ -23,7 +23,7 @@ use crate::config::Config;
 use crate::controls::media_controls;
 use crate::db::get_connection;
 use crate::schema::config::dsl::config as config_table;
-use crate::schema::config::{window_height, window_width};
+use crate::schema::config::{maximized, window_height, window_width};
 
 fn main() -> Result<ExitCode> {
     std_logger::Config::logfmt().init();
@@ -69,6 +69,7 @@ fn main() -> Result<ExitCode> {
         let window = if !home_button.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
             let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
             window_builder.default_width(config.window_width).default_height(config.window_height)
+                .maximized(config.maximized == 1)
         } else {
             window_builder
         }.build();
@@ -76,8 +77,8 @@ fn main() -> Result<ExitCode> {
             let application = application.clone();
             move |window| {
                 let (width, height) = window.default_size();
-                update(config_table).set((window_width.eq(width), window_height.eq(height)))
-                    .execute(&mut get_connection()).unwrap();
+                update(config_table).set((window_width.eq(width), window_height.eq(height),
+                    maximized.eq(if window.is_maximized() { 1 } else { 0 }))).execute(&mut get_connection()).unwrap();
                 application.quit();
             }
         });

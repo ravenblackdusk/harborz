@@ -15,6 +15,7 @@ diesel::table! {
         current_song_id -> Nullable<Integer>,
         window_width -> Integer,
         window_height -> Integer,
+        maximized -> Integer,
     }
 }
 

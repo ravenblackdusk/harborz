@@ -8,4 +8,5 @@ pub struct Config {
     pub current_song_id: Option<i32>,
     pub window_width: i32,
     pub window_height: i32,
+    pub maximized: i32,
 }
