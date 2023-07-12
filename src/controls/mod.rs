@@ -1,13 +1,15 @@
 use std::time::Duration;
+use ContentFit::Contain;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
 use gstreamer::ClockTime;
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, Grid, Inhibit, Label, Scale, ScrollType};
+use gtk::{Button, ContentFit, Grid, IconLookupFlags, IconTheme, Inhibit, Label, Picture, Scale, ScrollType, TextDirection};
 use gtk::gdk::SeatCapabilities;
 use gtk::Orientation::{Horizontal, Vertical};
+use gtk::pango::EllipsizeMode;
 use gtk::prelude::{BoxExt, ButtonExt, DisplayExt, GridExt, RangeExt, SeatExt, WidgetExt};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
@@ -53,11 +55,17 @@ impl Playable for Button {
 
 pub fn media_controls() -> Wrapper {
     let mpris_player = mpris_player();
-    let now_playing_box = gtk::Box::builder().orientation(Vertical).spacing(4).build();
-    let artist_label = Label::new(None);
-    now_playing_box.append(&artist_label);
-    let song_label = Label::new(None);
-    now_playing_box.append(&song_label);
+    let now_playing = gtk::Box::builder().orientation(Horizontal).build();
+    let artist_album = gtk::Box::builder().orientation(Vertical).build();
+    let unknown_album_file = IconTheme::for_display(&now_playing.display())
+        .lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None, IconLookupFlags::empty()).file().unwrap();
+    let album_picture = Picture::builder().content_fit(Contain).file(&unknown_album_file).build();
+    now_playing.append(&album_picture);
+    now_playing.append(&artist_album);
+    let artist_label = Label::builder().hexpand(true).max_width_chars(1).ellipsize(EllipsizeMode::End).build();
+    artist_album.append(&artist_label);
+    let song_label = Label::builder().hexpand(true).max_width_chars(1).ellipsize(EllipsizeMode::End).build();
+    artist_album.append(&song_label);
     let play_pause = Button::builder().hexpand(true).build();
     play_pause.play();
     let position_label = Label::new(Some(&format(0)));
@@ -97,7 +105,7 @@ pub fn media_controls() -> Wrapper {
     if !control_grid.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
         control_grid.attach(&volume_button(|volume| { PLAYBIN.set_property("volume", volume); }), 9, 0, 1, 1);
     }
-    controls.append(&now_playing_box);
+    controls.append(&now_playing);
     controls.append(&position_box);
     controls.append(&control_grid);
     play_pause.connect_clicked(move |play_pause| {
@@ -194,17 +202,26 @@ pub fn media_controls() -> Wrapper {
                 StreamStart(_) => {
                     let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
                     get_connection().transaction(|connection| {
-                        let (_, song) = collections.inner_join(songs)
+                        let (collection, song) = collections.inner_join(songs)
                             .filter(path.concat("/").concat(song_path).eq(uri))
                             .get_result::<(Collection, Song)>(connection)?;
                         update(config).set(current_song_id.eq(song.id)).execute(connection)?;
                         artist_label.set_label(or_none(&song.artist));
                         let title = song.title_str().to_owned();
                         song_label.set_label(&title);
+                        let cover = collection.path.to_path().join(song.path.to_path()).parent().unwrap()
+                            .join("cover.jpg");
+                        let art_url = if cover.exists() {
+                            album_picture.set_filename(Some(&cover));
+                            cover.to_str().map(String::from)
+                        } else {
+                            album_picture.set_file(Some(&unknown_album_file));
+                            Some(unknown_album_file.to_string())
+                        };
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
                         mpris_player.set_metadata(Metadata {
                             length: Some(song.duration),
-                            art_url: None,
+                            art_url,
                             album: song.album,
                             album_artist: song.album_artist.map(|it| { vec![it] }),
                             artist: song.artist.map(|it| { vec![it] }),
