@@ -33,7 +33,17 @@ fn main() -> Result<ExitCode> {
     get_connection().run_pending_migrations(MIGRATIONS)?;
     let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(|application| {
-        let add_collection_box = add_collection_box();
+        let main_box = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
+        let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
+        let window_builder = ApplicationWindow::builder().application(application).content(&main_box);
+        let window = if !home_button.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
+            let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
+            window_builder.default_width(config.window_width).default_height(config.window_height)
+                .maximized(config.maximized == 1)
+        } else {
+            window_builder
+        }.build();
+        let add_collection_box = add_collection_box(&window);
         let media_controls = media_controls();
         let title = Label::new(Some("Harborz"));
         let bar = HeaderBar::builder().title_widget(&title).build();
@@ -42,7 +52,6 @@ fn main() -> Result<ExitCode> {
         menu.append(&collection_button);
         let menu_button = MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build();
-        let main_box = gtk::Box::builder().spacing(4).orientation(Vertical).valign(Fill).build();
         let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
         home::set_body(&scrolled_window, &media_controls);
         main_box.append(&bar);
@@ -58,7 +67,6 @@ fn main() -> Result<ExitCode> {
                 menu_button.popdown();
             }
         });
-        let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
         home_button.connect_clicked({
             let scrolled_window = scrolled_window.clone();
             move |_| {
@@ -68,14 +76,6 @@ fn main() -> Result<ExitCode> {
         });
         bar.pack_start(&home_button);
         bar.pack_end(&menu_button);
-        let window_builder = ApplicationWindow::builder().application(application).content(&main_box);
-        let window = if !home_button.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
-            let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
-            window_builder.default_width(config.window_width).default_height(config.window_height)
-                .maximized(config.maximized == 1)
-        } else {
-            window_builder
-        }.build();
         window.connect_destroy({
             let application = application.clone();
             move |window| {
