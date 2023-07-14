@@ -47,8 +47,11 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
 }
 
 fn or_none(string: Rc<Option<String>>, list_item: &ListItem) {
-    list_item.set_child(Some(&Label::builder().label(util::or_none(&*string)).margin_start(4).margin_end(4)
-        .hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build()));
+    let gtk_box = gtk::Box::builder().build();
+    gtk_box.append(&Label::builder().label(util::or_none(&*string)).margin_start(4).margin_end(4)
+        .hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build());
+    gtk_box.append(&Image::builder().icon_name("go-next-symbolic").build());
+    list_item.set_child(Some(&gtk_box));
 }
 
 pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dyn AsRef<Widget>>>>>,

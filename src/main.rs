@@ -61,8 +61,7 @@ fn main() -> Result<ExitCode> {
             let title = title.clone();
             move |_| {
                 if let Some(last_child) = history.borrow_mut().pop() {
-                    let x = (*last_child).as_ref();
-                    scrolled_window.set_child(Some(x));
+                    scrolled_window.set_child(Some((*last_child).as_ref()));
                     title.set_label("Harborz");
                 }
             }
