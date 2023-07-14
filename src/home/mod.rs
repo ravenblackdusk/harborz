@@ -6,11 +6,10 @@ use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use gtk::{ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
-use gtk::pango::EllipsizeMode;
 use crate::collection::model::Collection;
 use crate::collection::song::get_current_album;
 use crate::collection::song::Song;
-use crate::common::util;
+use crate::common::{EllipsizedLabelBuilder, util};
 use crate::common::util::format;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::db::get_connection;
@@ -48,8 +47,7 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
 
 fn or_none(string: Rc<Option<String>>, list_item: &ListItem) {
     let gtk_box = gtk::Box::builder().build();
-    gtk_box.append(&Label::builder().label(util::or_none(&*string)).margin_start(4).margin_end(4)
-        .hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build());
+    gtk_box.append(&Label::builder().label(util::or_none(&*string)).ellipsized().build());
     gtk_box.append(&Image::builder().icon_name("go-next-symbolic").build());
     list_item.set_child(Some(&gtk_box));
 }
@@ -93,8 +91,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                 }), false),
                                 (Box::new(|rc, list_item| {
                                     let (_, song, _) = &*rc;
-                                    list_item.set_child(Some(&Label::builder().label(song.title_str()).hexpand(true)
-                                        .xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End).build()));
+                                    list_item.set_child(Some(&Label::builder().label(song.title_str()).ellipsized()
+                                        .build()));
                                 }), true),
                                 (Box::new(|rc, list_item| {
                                     let (_, song, _) = &*rc;

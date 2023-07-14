@@ -1,11 +1,10 @@
 use std::ops::Add;
 use diesel::{Connection, delete, ExpressionMethods, QueryDsl, RunQueryDsl, update};
-use gtk::{prelude, Button, Label};
+use gtk::{Button, Label, prelude};
 use gtk::Orientation::{Horizontal, Vertical};
-use gtk::pango::EllipsizeMode;
 use prelude::*;
 use crate::collection::model::Collection;
-use crate::common::gtk_box;
+use crate::common::{EllipsizedLabelBuilder, gtk_box};
 use crate::common::util::PathString;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
@@ -27,8 +26,8 @@ impl CollectionBox for gtk::Box {
     fn add(&self, id: i32, path: &String) {
         let remove_button = Button::builder().icon_name("list-remove").build();
         let inner_box = gtk_box(Horizontal);
-        inner_box.append(&Label::builder().max_width_chars(1).hexpand(true).ellipsize(EllipsizeMode::End)
-            .label(path.to_path().file_name().unwrap().to_str().unwrap()).build());
+        inner_box.append(&Label::builder().ellipsized().label(path.to_path().file_name().unwrap().to_str().unwrap())
+            .build());
         inner_box.append(&remove_button);
         self.append(&inner_box);
         remove_button.connect_clicked({
