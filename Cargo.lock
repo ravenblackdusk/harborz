@@ -683,17 +683,18 @@ dependencies = [
 name = "harborz"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "diesel",
- "diesel_migrations",
- "gstreamer",
- "gstreamer-pbutils",
- "gtk4",
- "log",
- "mpris-player",
- "once_cell",
- "std-logger",
- "walkdir",
+    "anyhow",
+    "diesel",
+    "diesel_migrations",
+    "gstreamer",
+    "gstreamer-pbutils",
+    "gtk4",
+    "libadwaita",
+    "log",
+    "mpris-player",
+    "once_cell",
+    "std-logger",
+    "walkdir",
 ]
 
 [[package]]
@@ -714,8 +715,8 @@ version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
 dependencies = [
- "autocfg",
- "hashbrown",
+    "autocfg",
+    "hashbrown",
 ]
 
 [[package]]
@@ -723,6 +724,39 @@ name = "itoa"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
+
+[[package]]
+name = "libadwaita"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ab9c0843f9f23ff25634df2743690c3a1faffe0a190e60c490878517eb81abf"
+dependencies = [
+    "bitflags",
+    "gdk-pixbuf",
+    "gdk4",
+    "gio",
+    "glib 0.17.10",
+    "gtk4",
+    "libadwaita-sys",
+    "libc",
+    "pango",
+]
+
+[[package]]
+name = "libadwaita-sys"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4231cb2499a9f0c4cdfa4885414b33e39901ddcac61150bc0bb4ff8a57ede404"
+dependencies = [
+    "gdk4-sys",
+    "gio-sys",
+    "glib-sys 0.17.10",
+    "gobject-sys 0.17.10",
+    "gtk4-sys",
+    "libc",
+    "pango-sys",
+    "system-deps",
+]
 
 [[package]]
 name = "libc"
