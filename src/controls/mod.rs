@@ -213,10 +213,10 @@ pub fn media_controls() -> Wrapper {
                             .join("cover.jpg");
                         let art_url = if cover.exists() {
                             album_picture.set_filename(Some(&cover));
-                            cover.to_str().map(String::from)
+                            cover.to_str().map(|it| { format!("file:{}", it) })
                         } else {
                             album_picture.set_file(Some(&unknown_album_file));
-                            Some(unknown_album_file.to_string())
+                            None
                         };
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
                         mpris_player.set_metadata(Metadata {
