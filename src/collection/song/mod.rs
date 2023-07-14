@@ -1,5 +1,6 @@
-use std::sync::mpsc::Sender;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
 use diesel::{BoolExpressionMethods, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
@@ -13,8 +14,8 @@ use walkdir::WalkDir;
 use crate::collection::model::Collection;
 use crate::common::util::PathString;
 use crate::schema::collections::table as collections;
-use crate::schema::songs::dsl::songs;
 use crate::schema::songs::*;
+use crate::schema::songs::dsl::songs;
 
 #[derive(diesel::Queryable, diesel::Selectable, Debug)]
 #[diesel(table_name = crate::schema::songs)]
@@ -36,6 +37,17 @@ pub struct Song {
 impl Song {
     pub fn title_str(&self) -> &str {
         self.title.as_deref().unwrap_or(self.path.to_path().file_name().unwrap().to_str().unwrap())
+    }
+}
+
+pub trait WithPath {
+    fn path(&self) -> PathBuf;
+}
+
+impl WithPath for (&Song, &Collection) {
+    fn path(&self) -> PathBuf {
+        let (song, collection) = self;
+        collection.path.to_path().join(song.path.to_path())
     }
 }
 

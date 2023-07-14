@@ -8,24 +8,25 @@ use gstreamer::prelude::{ElementExt, ElementExtManual};
 use gstreamer::State::{Null, Playing};
 use gtk::{Label, Scale};
 use once_cell::sync::Lazy;
-use crate::collection::song::get_current_album;
-use crate::common::util::{format, PathString};
+use crate::collection::model::Collection;
+use crate::collection::song::{get_current_album, Song};
+use crate::collection::song::WithPath;
+use crate::common::util::format;
+use crate::config::Config;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
-use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::{album, artist};
 use crate::schema::songs::dsl::songs;
-use crate::schema::songs::path as song_path;
 
 pub(in crate::controls) const URI: &'static str = "uri";
 
 pub(in crate::controls) static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     let playbin = ElementFactory::make("playbin3").build().unwrap().downcast::<Pipeline>().unwrap();
-    let path_buf = songs.inner_join(collections).inner_join(config).select((path, song_path))
-        .get_result::<(String, String)>(&mut get_connection()).map(|(collection_path, current_song_path)| {
-        collection_path.to_path().join(current_song_path.to_path())
+    let path_buf = songs.inner_join(collections).inner_join(config)
+        .get_result::<(Song, Collection, Config)>(&mut get_connection()).map(|(song, collection, _)| {
+        (&song, &collection).path()
     }).unwrap_or(PathBuf::from(""));
     playbin.set_uri(&path_buf);
     playbin.connect("about-to-finish", true, |_| {
@@ -78,7 +79,7 @@ pub(in crate::controls) fn go_delta_song(delta: i32, now: bool) {
                 let (delta_song, delta_collection) = &song_collections[delta_song_index as usize];
                 let playing = PLAYBIN.current_state() == Playing;
                 if now { PLAYBIN.set_state(Null).unwrap(); }
-                PLAYBIN.set_uri(&delta_collection.path.to_path().join(delta_song.path.to_path()));
+                PLAYBIN.set_uri(&(delta_song, delta_collection).path());
                 if now && playing { PLAYBIN.set_state(Playing).unwrap(); }
             }
         }
