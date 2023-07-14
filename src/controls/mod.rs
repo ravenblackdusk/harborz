@@ -1,4 +1,5 @@
 use std::time::Duration;
+use adw::prelude::*;
 use ContentFit::Contain;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
 use gstreamer::ClockTime;
@@ -10,7 +11,6 @@ use gtk::{Button, ContentFit, Grid, IconLookupFlags, IconTheme, Inhibit, Label, 
 use gtk::gdk::SeatCapabilities;
 use gtk::Orientation::{Horizontal, Vertical};
 use gtk::pango::EllipsizeMode;
-use gtk::prelude::{BoxExt, ButtonExt, DisplayExt, GridExt, RangeExt, SeatExt, WidgetExt};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;

@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use std::time::Duration;
+use adw::prelude::RangeExt;
 use diesel::{Connection, QueryDsl, RunQueryDsl};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::{Cast, ObjectExt};
 use gstreamer::prelude::{ElementExt, ElementExtManual};
 use gstreamer::State::{Null, Playing};
 use gtk::{Label, Scale};
-use gtk::prelude::RangeExt;
 use once_cell::sync::Lazy;
 use crate::collection::song::get_current_album;
 use crate::common::util::{format, PathString};

@@ -1,8 +1,8 @@
 use std::cell::RefCell;
+use adw::prelude::*;
 use gtk::*;
 use gtk::glib::{self, ParamSpec, Properties};
 use gtk::glib::subclass::Signal;
-use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::Widget;
 use once_cell::sync::Lazy;

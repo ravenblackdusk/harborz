@@ -1,6 +1,6 @@
+use adw::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use diesel::{ExpressionMethods, RunQueryDsl, update};
 use gtk::*;
-use gtk::prelude::{BoxExt, ButtonExt, RangeExt, WidgetExt};
 use Orientation::Vertical;
 use crate::common::gtk_box;
 use crate::config::Config;

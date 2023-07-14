@@ -1,14 +1,15 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use adw::{Application, ApplicationWindow, HeaderBar};
-use adw::prelude::{ApplicationExt, ApplicationExtManual, DisplayExt, SeatExt};
+use adw::prelude::*;
 use diesel::{ExpressionMethods, RunQueryDsl, update};
 use diesel::migration::Result;
 use diesel_migrations::MigrationHarness;
-use gtk::{Button, Label, MenuButton, Popover, ScrolledWindow};
+use gtk::{Button, Label, MenuButton, Popover, ScrolledWindow, Widget};
 use gtk::Align::Fill;
 use gtk::gdk::SeatCapabilities;
 use gtk::glib::ExitCode;
 use gtk::Orientation::Vertical;
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, WidgetExt};
 use db::MIGRATIONS;
 use crate::collection::add_collection_box;
 use crate::common::constant::APP_ID;
@@ -34,9 +35,9 @@ fn main() -> Result<ExitCode> {
     let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(|application| {
         let main_box = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
-        let home_button = Button::builder().icon_name("go-home").tooltip_text("Home").build();
+        let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home").build();
         let window_builder = ApplicationWindow::builder().application(application).content(&main_box);
-        let window = if !home_button.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
+        let window = if !main_box.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
             let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
             window_builder.default_width(config.window_width).default_height(config.window_height)
                 .maximized(config.maximized == 1)
@@ -53,28 +54,35 @@ fn main() -> Result<ExitCode> {
         let menu_button = MenuButton::builder().icon_name("open-menu-symbolic")
             .tooltip_text("Menu").popover(&Popover::builder().child(&menu).build()).build();
         let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
-        home::set_body(&scrolled_window, &media_controls);
-        main_box.append(&bar);
-        main_box.append(&scrolled_window);
-        main_box.append(&media_controls);
-        collection_button.connect_clicked({
+        let history: Rc<RefCell<Vec<Box<dyn AsRef<Widget>>>>> = Rc::new(RefCell::new(Vec::new()));
+        back_button.connect_clicked({
+            let history = history.clone();
             let scrolled_window = scrolled_window.clone();
             let title = title.clone();
+            move |_| {
+                if let Some(last_child) = history.borrow_mut().pop() {
+                    let x = (*last_child).as_ref();
+                    scrolled_window.set_child(Some(x));
+                    title.set_label("Harborz");
+                }
+            }
+        });
+        collection_button.connect_clicked({
+            let history = history.clone();
+            let scrolled_window = scrolled_window.clone();
             let menu_button = menu_button.clone();
             move |_| {
+                history.borrow_mut().push(Box::new(scrolled_window.child().unwrap()));
                 scrolled_window.set_child(Some(&add_collection_box));
                 title.set_label("Collection");
                 menu_button.popdown();
             }
         });
-        home_button.connect_clicked({
-            let scrolled_window = scrolled_window.clone();
-            move |_| {
-                home::set_body(&scrolled_window, &media_controls);
-                title.set_label("Harborz");
-            }
-        });
-        bar.pack_start(&home_button);
+        home::set_body(&scrolled_window, history, &media_controls);
+        main_box.append(&bar);
+        main_box.append(&scrolled_window);
+        main_box.append(&media_controls);
+        bar.pack_start(&back_button);
         bar.pack_end(&menu_button);
         window.connect_destroy({
             let application = application.clone();
