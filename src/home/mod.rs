@@ -101,7 +101,7 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                 .cover();
                             if cover.exists() {
                                 let picture = Picture::builder().content_fit(Contain).build();
-                                picture.set_pixbuf(Some(&Pixbuf::from_file_at_scale(cover, -1, 120, true).unwrap()));
+                                picture.set_pixbuf(Some(&Pixbuf::from_file_at_scale(cover, -1, 60, true).unwrap()));
                                 list_item.set_child(Some(&picture));
                             }
                         }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),
