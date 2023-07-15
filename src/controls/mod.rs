@@ -1,5 +1,4 @@
 use std::time::Duration;
-use adw::gdk::pango::{AttrInt, AttrList, Weight};
 use adw::prelude::*;
 use ContentFit::Contain;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
@@ -17,7 +16,7 @@ use util::format;
 use crate::collection::model::Collection;
 use crate::collection::song::{join_path, Song, WithCover};
 use crate::collection::song::WithPath;
-use crate::common::{EllipsizedLabelBuilder, gtk_box, util};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, gtk_box, util};
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::controls::mpris::mpris_player;
@@ -65,10 +64,7 @@ pub fn media_controls() -> Wrapper {
     now_playing.append(&artist_album);
     let artist_label = Label::builder().ellipsized().build();
     artist_album.append(&artist_label);
-    let song_label = Label::builder().ellipsized().build();
-    let attr_list = AttrList::new();
-    attr_list.insert(AttrInt::new_weight(Weight::Bold));
-    song_label.set_attributes(Some(&attr_list));
+    let song_label = Label::builder().ellipsized().bold().build();
     artist_album.append(&song_label);
     let play_pause = Button::builder().hexpand(true).build();
     play_pause.play();

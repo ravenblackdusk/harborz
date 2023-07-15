@@ -5,15 +5,16 @@ use std::rc::Rc;
 use adw::gio::File;
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-use diesel::dsl::min;
+use diesel::dsl::{count_distinct, count_star, min};
 use gtk::{ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, Picture, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::ContentFit::Contain;
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
+use gtk::Orientation::Vertical;
 use crate::collection::model::Collection;
 use crate::collection::song::{get_current_album, join_path, WithCover};
 use crate::collection::song::Song;
-use crate::common::{EllipsizedLabelBuilder, util};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, util};
 use crate::common::util::format;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::db::get_connection;
@@ -57,31 +58,48 @@ fn append_label_and_go_next(gtk_box: &gtk::Box, label: &Option<String>, list_ite
     list_item.set_child(Some(gtk_box));
 }
 
-fn artist_row(artist_string: Rc<Option<String>>, list_item: &ListItem) {
-    let gtk_box = gtk::Box::builder().build();
-    append_label_and_go_next(&gtk_box, &*artist_string, list_item);
+fn artist_row(rc: Rc<(Option<String>, i64, i64)>, list_item: &ListItem) {
+    let (album_string, album_count, song_count) = rc.borrow();
+    let artist_row = gtk::Box::builder().build();
+    let artist_box = gtk::Box::builder().orientation(Vertical).build();
+    let count_box = gtk::Box::builder().spacing(4).build();
+    let album_count_box = gtk::Box::builder().spacing(4).build();
+    let song_count_box = gtk::Box::builder().spacing(4).build();
+    count_box.append(&album_count_box);
+    count_box.append(&song_count_box);
+    album_count_box.append(&Label::builder().label(album_count.to_string()).build());
+    album_count_box.append(&Label::builder().label("Albums").build());
+    song_count_box.append(&Label::builder().label(song_count.to_string()).build());
+    song_count_box.append(&Label::builder().label("Songs").build());
+    artist_box.append(&Label::builder().label(util::or_none(album_string)).ellipsized().bold().build());
+    artist_box.append(&count_box);
+    artist_row.append(&artist_box);
+    artist_row.append(&Image::builder().icon_name("go-next-symbolic").build());
+    list_item.set_child(Some(&artist_row));
 }
 
 fn album_row(rc: Rc<(Option<String>, Option<String>, Option<String>)>, list_item: &ListItem) {
     let (album_string, collection_path, album_song_path) = rc.borrow();
-    let gtk_box = gtk::Box::builder().build();
+    let album_box = gtk::Box::builder().build();
     let cover = join_path(&collection_path.clone().unwrap(), &album_song_path.clone().unwrap()).cover();
     let picture_builder = Picture::builder().content_fit(Contain);
-    gtk_box.append(&if cover.exists() { picture_builder.file(&File::for_path(cover)) } else { picture_builder }.build());
-    append_label_and_go_next(&gtk_box, album_string, list_item);
+    album_box.append(&if cover.exists() { picture_builder.file(&File::for_path(cover)) } else { picture_builder }.build());
+    append_label_and_go_next(&album_box, album_string, list_item);
 }
 
 pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dyn AsRef<Widget>>>>>,
     media_controls: &Wrapper) {
     list_box(Some(history.clone()), scrolled_window,
-        songs.select(artist).group_by(artist).get_results::<Option<String>>(&mut get_connection()).unwrap()
-            .into_iter().map(Rc::new).collect::<Vec<_>>(),
+        songs.group_by(artist).select((artist, count_distinct(album), count_star()))
+            .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap().into_iter().map(Rc::new)
+            .collect::<Vec<_>>(),
         vec![(Box::new(artist_row), true)], {
             let scrolled_window = scrolled_window.clone();
             let media_controls = media_controls.clone();
-            move |artist_string| {
+            move |rc| {
+                let (artist_string, _, _) = rc.borrow();
                 list_box(Some(history.clone()), &scrolled_window, songs.inner_join(collections)
-                    .filter(artist.eq(&*artist_string)).group_by(album).select((album, min(path), min(song_path)))
+                    .filter(artist.eq(artist_string)).group_by(album).select((album, min(path), min(song_path)))
                     .get_results::<(Option<String>, Option<String>, Option<String>)>(&mut get_connection()).unwrap()
                     .into_iter().map(Rc::new).collect::<Vec<_>>(), vec![(Box::new(album_row), true)], {
                     let scrolled_window = scrolled_window.clone();
@@ -90,7 +108,7 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                     move |rc| {
                         let (album_string, _, _) = rc.borrow();
                         list_box(None, &scrolled_window,
-                            get_current_album(&*artist_string, &album_string, &mut get_connection()).into_iter()
+                            get_current_album(&artist_string, &album_string, &mut get_connection()).into_iter()
                                 .map(|(song, collection)| { Rc::new((media_controls.clone(), song, collection)) })
                                 .collect::<Vec<_>>(),
                             vec![
