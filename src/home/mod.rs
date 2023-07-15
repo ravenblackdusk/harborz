@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
+use adw::gdk::pango::{AttrInt, AttrList, FontScale};
 use adw::gio::File;
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
@@ -60,17 +61,19 @@ fn append_label_and_go_next(gtk_box: &gtk::Box, label: &Option<String>, list_ite
 
 fn artist_row(rc: Rc<(Option<String>, i64, i64)>, list_item: &ListItem) {
     let (album_string, album_count, song_count) = rc.borrow();
-    let artist_row = gtk::Box::builder().build();
+    let artist_row = gtk::Box::builder().margin_top(4).margin_bottom(4).build();
     let artist_box = gtk::Box::builder().orientation(Vertical).build();
     let count_box = gtk::Box::builder().spacing(4).build();
     let album_count_box = gtk::Box::builder().spacing(4).build();
     let song_count_box = gtk::Box::builder().spacing(4).build();
     count_box.append(&album_count_box);
     count_box.append(&song_count_box);
-    album_count_box.append(&Label::builder().label(album_count.to_string()).build());
-    album_count_box.append(&Label::builder().label("Albums").build());
-    song_count_box.append(&Label::builder().label(song_count.to_string()).build());
-    song_count_box.append(&Label::builder().label("Songs").build());
+    let attr_list = AttrList::new();
+    attr_list.insert(AttrInt::new_font_scale(FontScale::Subscript));
+    album_count_box.append(&Label::builder().label(album_count.to_string()).margin_start(4).attributes(&attr_list).build());
+    album_count_box.append(&Label::builder().label("Albums").attributes(&attr_list).build());
+    song_count_box.append(&Label::builder().label(song_count.to_string()).attributes(&attr_list).build());
+    song_count_box.append(&Label::builder().label("Songs").attributes(&attr_list).build());
     artist_box.append(&Label::builder().label(util::or_none(album_string)).ellipsized().bold().build());
     artist_box.append(&count_box);
     artist_row.append(&artist_box);
