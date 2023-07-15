@@ -1,4 +1,4 @@
-use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, Weight};
+use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
 use gtk::{Box, Orientation};
 use gtk::builders::{BoxBuilder, LabelBuilder};
 
@@ -32,6 +32,18 @@ impl BoldLabelBuilder for LabelBuilder {
     fn bold(self) -> Self {
         let attr_list = AttrList::new();
         attr_list.insert(AttrInt::new_weight(Weight::Bold));
+        self.attributes(&attr_list)
+    }
+}
+
+pub trait SubscriptLabelBuilder {
+    fn subscript(self) -> LabelBuilder;
+}
+
+impl SubscriptLabelBuilder for LabelBuilder {
+    fn subscript(self) -> LabelBuilder {
+        let attr_list = AttrList::new();
+        attr_list.insert(AttrInt::new_font_scale(FontScale::Subscript));
         self.attributes(&attr_list)
     }
 }
