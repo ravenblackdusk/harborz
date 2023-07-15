@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
-use adw::gio::File;
+use adw::gdk::gdk_pixbuf::Pixbuf;
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
@@ -99,8 +99,11 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                             let (_, _, collection_path, album_song_path) = rc.borrow();
                             let cover = join_path(&collection_path.clone().unwrap(), &album_song_path.clone().unwrap())
                                 .cover();
-                            list_item.set_child(cover.exists().then_some(&Picture::builder().content_fit(Contain)
-                                .file(&File::for_path(cover)).build()));
+                            if cover.exists() {
+                                let picture = Picture::builder().content_fit(Contain).build();
+                                picture.set_pixbuf(Some(&Pixbuf::from_file_at_scale(cover, -1, 120, true).unwrap()));
+                                list_item.set_child(Some(&picture));
+                            }
                         }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),
                         (Box::new(|rc, list_item| {
                             let (album_string, count, _, _) = rc.borrow();
