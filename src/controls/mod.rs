@@ -15,10 +15,10 @@ use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
 use crate::collection::model::Collection;
-use crate::collection::song::Song;
+use crate::collection::song::{join_path, Song, WithCover};
 use crate::collection::song::WithPath;
 use crate::common::{EllipsizedLabelBuilder, gtk_box, util};
-use crate::common::util::{or_none, PathString};
+use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::controls::mpris::mpris_player;
 use crate::controls::playbin::{go_delta_song, PLAYBIN, Playbin, URI};
@@ -142,8 +142,8 @@ pub fn media_controls() -> Wrapper {
             if let [_, current_song_path, collection_path] = &params {
                 let playing = PLAYBIN.current_state() == Playing;
                 PLAYBIN.set_state(Null).unwrap();
-                PLAYBIN.set_uri(&collection_path.get::<String>().unwrap().to_path()
-                    .join(current_song_path.get::<String>().unwrap().to_path()));
+                PLAYBIN.set_uri(&join_path(&collection_path.get::<String>().unwrap(),
+                    &current_song_path.get::<String>().unwrap()));
                 if playing {
                     PLAYBIN.set_state(Playing).unwrap();
                 } else {
@@ -213,7 +213,7 @@ pub fn media_controls() -> Wrapper {
                         artist_label.set_label(or_none(&song.artist));
                         let title = song.title_str().to_owned();
                         song_label.set_label(&title);
-                        let cover = (&song, &collection).path().parent().unwrap().join("cover.jpg");
+                        let cover = (&song, &collection).path().cover();
                         let art_url = if cover.exists() {
                             album_picture.set_filename(Some(&cover));
                             cover.to_str().map(|it| { format!("file:{}", it) })

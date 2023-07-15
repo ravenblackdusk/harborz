@@ -40,6 +40,10 @@ impl Song {
     }
 }
 
+pub fn join_path(collection_path: &String, song_path: &String) -> PathBuf {
+    collection_path.to_path().join(song_path.to_path())
+}
+
 pub trait WithPath {
     fn path(&self) -> PathBuf;
 }
@@ -47,7 +51,17 @@ pub trait WithPath {
 impl WithPath for (&Song, &Collection) {
     fn path(&self) -> PathBuf {
         let (song, collection) = self;
-        collection.path.to_path().join(song.path.to_path())
+        join_path(&collection.path, &song.path)
+    }
+}
+
+pub trait WithCover {
+    fn cover(&self) -> PathBuf;
+}
+
+impl WithCover for PathBuf {
+    fn cover(&self) -> PathBuf {
+        self.parent().unwrap().join("cover.jpg")
     }
 }
 
