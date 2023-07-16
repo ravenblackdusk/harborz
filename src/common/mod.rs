@@ -24,15 +24,19 @@ impl EllipsizedLabelBuilder for LabelBuilder {
     }
 }
 
+pub fn weight(weight: Weight) -> AttrList {
+    let attr_list = AttrList::new();
+    attr_list.insert(AttrInt::new_weight(weight));
+    attr_list
+}
+
 pub trait BoldLabelBuilder {
     fn bold(self) -> Self;
 }
 
 impl BoldLabelBuilder for LabelBuilder {
     fn bold(self) -> Self {
-        let attr_list = AttrList::new();
-        attr_list.insert(AttrInt::new_weight(Weight::Bold));
-        self.attributes(&attr_list)
+        self.attributes(&weight(Weight::Bold))
     }
 }
 

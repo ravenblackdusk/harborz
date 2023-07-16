@@ -11,10 +11,11 @@ use gtk::ContentFit::Contain;
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
+use gtk::pango::Weight;
 use crate::collection::model::Collection;
 use crate::collection::song::{get_current_album, join_path, WithCover};
 use crate::collection::song::Song;
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, util};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, util, weight};
 use crate::common::util::format;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::db::get_connection;
@@ -58,6 +59,19 @@ fn or_none_label(label: &Option<String>) -> Label {
 
 fn next_icon() -> Image {
     Image::builder().icon_name("go-next-symbolic").build()
+}
+
+fn bold_if_now_playing_label(song: &Song, list_item: &ListItem, label: Label, wrapper: &Wrapper) {
+    let id = song.id;
+    list_item.set_child(Some(&label));
+    wrapper.connect_local(STREAM_STARTED, true, move |params| {
+        label.set_attributes(Some(&weight(if id == params[1].get::<i32>().unwrap() {
+            Weight::Bold
+        } else {
+            Weight::Normal
+        })));
+        None
+    });
 }
 
 pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dyn AsRef<Widget>>>>>,
@@ -132,28 +146,18 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                 vec![
                                     (Box::new(|rc: Rc<(Wrapper, Song, Collection)>, list_item: &ListItem| {
                                         let (wrapper, song, _) = &*rc;
-                                        let image = Image::builder().width_request(4).build();
-                                        let id = song.id;
-                                        list_item.set_child(Some(&image));
-                                        wrapper.connect_local(STREAM_STARTED, true, move |params| {
-                                            image.set_icon_name((id == params[1].get::<i32>().unwrap())
-                                                .then_some("media-playback-start"));
-                                            None
-                                        });
+                                        let label = Label::new(song.track_number.map(|it| { it.to_string() }).as_deref());
+                                        bold_if_now_playing_label(song, list_item, label, wrapper);
                                     }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
                                     (Box::new(|rc, list_item| {
-                                        let (_, song, _) = &*rc;
-                                        list_item.set_child(Some(&Label::new(song.track_number
-                                            .map(|it| { it.to_string() }).as_deref())));
-                                    }), false),
-                                    (Box::new(|rc, list_item| {
-                                        let (_, song, _) = &*rc;
-                                        list_item.set_child(Some(&Label::builder().label(song.title_str()).ellipsized()
-                                            .build()));
+                                        let (wrapper, song, _) = &*rc;
+                                        let label = Label::builder().label(song.title_str()).ellipsized().build();
+                                        bold_if_now_playing_label(song, list_item, label, wrapper);
                                     }), true),
                                     (Box::new(|rc, list_item| {
-                                        let (_, song, _) = &*rc;
-                                        list_item.set_child(Some(&Label::new(Some(&format(song.duration as u64)))));
+                                        let (wrapper, song, _) = &*rc;
+                                        let label = Label::new(Some(&format(song.duration as u64)));
+                                        bold_if_now_playing_label(song, list_item, label, wrapper);
                                     }), false),
                                 ], {
                                     let media_controls = media_controls.clone();

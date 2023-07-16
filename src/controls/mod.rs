@@ -62,10 +62,10 @@ pub fn media_controls() -> Wrapper {
     let album_picture = Picture::builder().content_fit(Contain).file(&unknown_album_file).build();
     now_playing.append(&album_picture);
     now_playing.append(&artist_album);
-    let artist_label = Label::builder().ellipsized().build();
-    artist_album.append(&artist_label);
     let song_label = Label::builder().ellipsized().bold().build();
+    let artist_label = Label::builder().ellipsized().build();
     artist_album.append(&song_label);
+    artist_album.append(&artist_label);
     let play_pause = Button::builder().hexpand(true).build();
     play_pause.play();
     let position_label = Label::new(Some(&format(0)));
