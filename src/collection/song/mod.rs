@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
-use diesel::{BoolExpressionMethods, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, SqliteConnection};
+use diesel::{BoolExpressionMethods, ExpressionMethods, insert_or_ignore_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::result::Error;
 use gstreamer::ClockTime;
@@ -13,7 +13,9 @@ use once_cell::sync::Lazy;
 use walkdir::WalkDir;
 use crate::collection::model::Collection;
 use crate::common::util::PathString;
+use crate::config::Config;
 use crate::schema::collections::table as collections;
+use crate::schema::config::dsl::config;
 use crate::schema::songs::*;
 use crate::schema::songs::dsl::songs;
 
@@ -122,6 +124,11 @@ pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sende
     }).filter_map(|result| { result.unwrap() }).max();
     sender.send(ImportProgress::CollectionEnd(collection.id, collection.path.to_owned())).unwrap();
     result
+}
+
+pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>)
+    -> QueryResult<(Song, Config, Collection)> {
+    Ok(songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)?)
 }
 
 pub fn get_current_album(artist_string: &Option<String>, album_string: &Option<String>,

@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::time::Duration;
+use adw::gio::File;
 use adw::prelude::*;
 use ContentFit::Contain;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
@@ -13,7 +15,7 @@ use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
 use crate::collection::model::Collection;
-use crate::collection::song::{join_path, Song, WithCover};
+use crate::collection::song::{get_current_song, join_path, Song, WithCover};
 use crate::collection::song::WithPath;
 use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, util};
 use crate::common::util::or_none;
@@ -57,7 +59,12 @@ pub fn media_controls() -> Wrapper {
     let song_info = gtk::Box::builder().orientation(Vertical).build();
     let unknown_album_file = IconTheme::for_display(&now_playing.display())
         .lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None, IconLookupFlags::empty()).file().unwrap();
-    let album_picture = Picture::builder().content_fit(Contain).file(&unknown_album_file).build();
+    let picture_file = if let Ok((song, _, collection)) = get_current_song(&mut get_connection()) {
+        Cow::Owned(File::for_path((&song, &collection).path()))
+    } else {
+        Cow::Borrowed(&unknown_album_file)
+    };
+    let album_picture = Picture::builder().content_fit(Contain).file(&*picture_file).build();
     now_playing.append(&album_picture);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
