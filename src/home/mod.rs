@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::gdk::gdk_pixbuf::Pixbuf;
+use adw::gdk::pango::{AttrInt, AttrList};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
@@ -15,7 +16,7 @@ use gtk::pango::Weight;
 use crate::collection::model::Collection;
 use crate::collection::song::{get_current_album, join_path, WithCover};
 use crate::collection::song::Song;
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, util, weight};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, util};
 use crate::common::util::format;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::db::get_connection;
@@ -54,7 +55,7 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
 }
 
 fn or_none_label(label: &Option<String>) -> Label {
-    Label::builder().label(util::or_none(label)).ellipsized().bold().build()
+    Label::builder().label(util::or_none(label)).margin_ellipsized(4).bold().build()
 }
 
 fn next_icon() -> Image {
@@ -65,11 +66,16 @@ fn bold_if_now_playing_label(song: &Song, list_item: &ListItem, label: Label, wr
     let id = song.id;
     list_item.set_child(Some(&label));
     wrapper.connect_local(STREAM_STARTED, true, move |params| {
-        label.set_attributes(Some(&weight(if id == params[1].get::<i32>().unwrap() {
-            Weight::Bold
+        let attr_list = label.attributes().unwrap_or_else(AttrList::new);
+        label.set_attributes(Some(&if id == params[1].get::<i32>().unwrap() {
+            label.add_css_class("accent");
+            attr_list.change(AttrInt::new_weight(Weight::Bold));
+            attr_list
         } else {
-            Weight::Normal
-        })));
+            label.remove_css_class("accent");
+            attr_list.change(AttrInt::new_weight(Weight::Normal));
+            attr_list
+        }));
         None
     });
 }
@@ -146,7 +152,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                 vec![
                                     (Box::new(|rc: Rc<(Wrapper, Song, Collection)>, list_item: &ListItem| {
                                         let (wrapper, song, _) = &*rc;
-                                        let label = Label::new(song.track_number.map(|it| { it.to_string() }).as_deref());
+                                        let label = Label::new(song.track_number.map(|it| { it.to_string() })
+                                            .as_deref());
                                         bold_if_now_playing_label(song, list_item, label, wrapper);
                                     }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
                                     (Box::new(|rc, list_item| {
@@ -156,7 +163,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                     }), true),
                                     (Box::new(|rc, list_item| {
                                         let (wrapper, song, _) = &*rc;
-                                        let label = Label::new(Some(&format(song.duration as u64)));
+                                        let label = Label::builder().label(&format(song.duration as u64)).subscript()
+                                            .build();
                                         bold_if_now_playing_label(song, list_item, label, wrapper);
                                     }), false),
                                 ], {

@@ -16,18 +16,16 @@ pub fn gtk_box(orientation: Orientation) -> Box {
 
 pub trait EllipsizedLabelBuilder {
     fn ellipsized(self) -> Self;
+    fn margin_ellipsized(self, i: i32) -> Self;
 }
 
 impl EllipsizedLabelBuilder for LabelBuilder {
     fn ellipsized(self) -> Self {
-        self.margin_start(4).margin_end(4).hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End)
+        self.hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End)
     }
-}
-
-pub fn weight(weight: Weight) -> AttrList {
-    let attr_list = AttrList::new();
-    attr_list.insert(AttrInt::new_weight(weight));
-    attr_list
+    fn margin_ellipsized(self, margin: i32) -> Self {
+        self.ellipsized().margin_start(margin).margin_end(margin)
+    }
 }
 
 pub trait BoldLabelBuilder {
@@ -36,7 +34,9 @@ pub trait BoldLabelBuilder {
 
 impl BoldLabelBuilder for LabelBuilder {
     fn bold(self) -> Self {
-        self.attributes(&weight(Weight::Bold))
+        let attr_list = AttrList::new();
+        attr_list.insert(AttrInt::new_weight(Weight::Bold));
+        self.attributes(&attr_list)
     }
 }
 
