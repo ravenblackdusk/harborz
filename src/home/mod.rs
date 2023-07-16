@@ -62,7 +62,7 @@ fn next_icon() -> Image {
     Image::builder().icon_name("go-next-symbolic").build()
 }
 
-fn bold_if_now_playing_label(song: &Song, list_item: &ListItem, label: Label, wrapper: &Wrapper) {
+fn bold_if_now_playing(song: &Song, list_item: &ListItem, label: Label, wrapper: &Wrapper) {
     let id = song.id;
     list_item.set_child(Some(&label));
     wrapper.connect_local(STREAM_STARTED, true, move |params| {
@@ -154,18 +154,18 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                         let (wrapper, song, _) = &*rc;
                                         let label = Label::new(song.track_number.map(|it| { it.to_string() })
                                             .as_deref());
-                                        bold_if_now_playing_label(song, list_item, label, wrapper);
+                                        bold_if_now_playing(song, list_item, label, wrapper);
                                     }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
                                     (Box::new(|rc, list_item| {
                                         let (wrapper, song, _) = &*rc;
                                         let label = Label::builder().label(song.title_str()).ellipsized().build();
-                                        bold_if_now_playing_label(song, list_item, label, wrapper);
+                                        bold_if_now_playing(song, list_item, label, wrapper);
                                     }), true),
                                     (Box::new(|rc, list_item| {
                                         let (wrapper, song, _) = &*rc;
                                         let label = Label::builder().label(&format(song.duration as u64)).subscript()
                                             .build();
-                                        bold_if_now_playing_label(song, list_item, label, wrapper);
+                                        bold_if_now_playing(song, list_item, label, wrapper);
                                     }), false),
                                 ], {
                                     let media_controls = media_controls.clone();

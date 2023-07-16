@@ -7,7 +7,7 @@ use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, ContentFit, Grid, IconLookupFlags, IconTheme, Inhibit, Label, Picture, Scale, ScrollType, TextDirection};
+use gtk::{Button, ContentFit, Grid, IconLookupFlags, IconTheme, Inhibit, Label, Picture, ProgressBar, Scale, ScrollType, TextDirection};
 use gtk::gdk::SeatCapabilities;
 use gtk::Orientation::{Horizontal, Vertical};
 use log::warn;
@@ -72,8 +72,13 @@ pub fn media_controls() -> Wrapper {
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
     let duration_label = Label::new(Some(&format(0)));
+    let controls_and_progress = gtk::Box::builder().orientation(Vertical).build();
+    let progress_bar = ProgressBar::new();
+    progress_bar.add_css_class("osd");
+    controls_and_progress.append(&progress_bar);
     let controls = gtk::Box::builder().orientation(Vertical).spacing(4)
         .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
+    controls_and_progress.append(&controls);
     let position_box = gtk_box(Horizontal);
     let control_grid = Grid::builder().build();
     position_box.append(&position_label);
@@ -87,8 +92,9 @@ pub fn media_controls() -> Wrapper {
         .hexpand(true).build();
     seek_backward.connect_clicked({
         let position_label = position_label.clone();
+        let progress_bar = progress_bar.clone();
         let scale = scale.clone();
-        move |_| { PLAYBIN.simple_seek(Duration::from_secs(10), false, &position_label, &scale); }
+        move |_| { PLAYBIN.simple_seek(Duration::from_secs(10), false, &position_label, &progress_bar, &scale); }
     });
     control_grid.attach(&seek_backward, 2, 0, 1, 1);
     control_grid.attach(&play_pause, 3, 0, 3, 1);
@@ -96,8 +102,9 @@ pub fn media_controls() -> Wrapper {
         .hexpand(true).build();
     seek_forward.connect_clicked({
         let position_label = position_label.clone();
+        let progress_bar = progress_bar.clone();
         let scale = scale.clone();
-        move |_| { PLAYBIN.simple_seek(Duration::from_secs(30), true, &position_label, &scale); }
+        move |_| { PLAYBIN.simple_seek(Duration::from_secs(30), true, &position_label, &progress_bar, &scale); }
     });
     control_grid.attach(&seek_forward, 6, 0, 1, 1);
     let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").hexpand(true).build();
@@ -122,17 +129,24 @@ pub fn media_controls() -> Wrapper {
     });
     scale.connect_change_value({
         let position_label = position_label.clone();
+        let progress_bar = progress_bar.clone();
         let scale = scale.clone();
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
-                if let Err(error) = PLAYBIN.seek_internal(value as u64, &position_label, &scale) {
-                    warn!("error trying to seek to {} {}", value, error);
+                match PLAYBIN.get_duration() {
+                    None => { warn!("cannot seek when duration is not available"); }
+                    Some(duration) => {
+                        if let Err(error) = PLAYBIN.seek_internal(value as u64, &position_label, &progress_bar,
+                            duration, &scale) {
+                            warn!("error trying to seek to {} {}", value, error);
+                        }
+                    }
                 }
             }
             Inhibit(true)
         }
     });
-    let wrapper = Wrapper::new(&controls);
+    let wrapper = Wrapper::new(&controls_and_progress);
     wrapper.connect_local(SONG_SELECTED, true, {
         let play_pause = play_pause.clone();
         move |params| {
@@ -161,10 +175,11 @@ pub fn media_controls() -> Wrapper {
     mpris_player.connect_pause(move || { if PLAYBIN.current_state() != Paused { play_pause.emit_clicked(); } });
     mpris_player.connect_seek({
         let position_label = position_label.clone();
+        let progress_bar = progress_bar.clone();
         let scale = scale.clone();
         move |delta_micros| {
             PLAYBIN.simple_seek(Duration::from_micros(delta_micros.abs() as u64), delta_micros >= 0,
-                &position_label, &scale);
+                &position_label, &progress_bar, &scale);
         }
     });
     PLAYBIN.bus().unwrap().add_watch_local({
@@ -179,11 +194,15 @@ pub fn media_controls() -> Wrapper {
                             timeout_add_local(Duration::from_millis(200), {
                                 let position_label = position_label.clone();
                                 let scale = scale.clone();
+                                let progress_bar = progress_bar.clone();
                                 let mpris_player = mpris_player.clone();
                                 move || {
                                     if let Some(position) = PLAYBIN.get_position() {
                                         position_label.set_label(&format(position));
                                         scale.set_value(position as f64);
+                                        if let Some(duration) = PLAYBIN.get_duration() {
+                                            progress_bar.set_fraction(position as f64 / duration as f64);
+                                        }
                                         mpris_player.set_position(position as i64);
                                     }
                                     Continue(PLAYBIN.current_state() == Playing || PLAYBIN.pending_state() == Playing)

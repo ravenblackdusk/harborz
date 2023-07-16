@@ -6,7 +6,7 @@ use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::{Cast, ObjectExt};
 use gstreamer::prelude::{ElementExt, ElementExtManual};
 use gstreamer::State::{Null, Playing};
-use gtk::{Label, Scale};
+use gtk::{Label, ProgressBar, Scale};
 use once_cell::sync::Lazy;
 use crate::collection::model::Collection;
 use crate::collection::song::{get_current_album, Song};
@@ -21,7 +21,6 @@ use crate::schema::songs::{album, artist};
 use crate::schema::songs::dsl::songs;
 
 pub(in crate::controls) const URI: &'static str = "uri";
-
 pub(in crate::controls) static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     let playbin = ElementFactory::make("playbin3").build().unwrap().downcast::<Pipeline>().unwrap();
     let path_buf = songs.inner_join(collections).inner_join(config)
@@ -39,8 +38,10 @@ pub(in crate::controls) static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
 pub(in crate::controls) trait Playbin {
     fn set_uri(&self, uri: &PathBuf);
     fn get_position(&self) -> Option<u64>;
-    fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()>;
-    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, scale: &Scale);
+    fn get_duration(&self) -> Option<u64>;
+    fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64, scale: &Scale)
+        -> anyhow::Result<()>;
+    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, progress_bar: &ProgressBar, scale: &Scale);
 }
 
 impl Playbin for Pipeline {
@@ -50,18 +51,23 @@ impl Playbin for Pipeline {
     fn get_position(&self) -> Option<u64> {
         PLAYBIN.query_position().map(ClockTime::nseconds)
     }
-    fn seek_internal(&self, value: u64, label: &Label, scale: &Scale) -> anyhow::Result<()> {
+    fn get_duration(&self) -> Option<u64> {
+        PLAYBIN.query_duration().map(ClockTime::nseconds)
+    }
+    fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64, scale: &Scale)
+        -> anyhow::Result<()> {
         self.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value))?;
         label.set_label(&format(value));
+        progress_bar.set_fraction(value as f64 / duration as f64);
         Ok(scale.set_value(value as f64))
     }
-    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, scale: &Scale) {
+    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, progress_bar: &ProgressBar, scale: &Scale) {
         if let Some(position) = self.get_position() {
             let nanos = duration.as_nanos() as i64;
+            let duration = PLAYBIN.get_duration().unwrap();
             self.seek_internal(
-                ((position as i64) + if forward { nanos } else { -nanos })
-                    .clamp(0, PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap() as i64) as u64,
-                &label, &scale,
+                ((position as i64) + if forward { nanos } else { -nanos }).clamp(0, duration as i64) as u64, &label,
+                &progress_bar, duration, &scale,
             ).unwrap();
         }
     }
