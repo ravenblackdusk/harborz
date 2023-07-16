@@ -72,7 +72,8 @@ pub fn media_controls() -> Wrapper {
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
     let duration_label = Label::new(Some(&format(0)));
-    let controls = gtk_box(Vertical);
+    let controls = gtk::Box::builder().orientation(Vertical).spacing(4)
+        .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
     let position_box = gtk_box(Horizontal);
     let control_grid = Grid::builder().build();
     position_box.append(&position_label);
