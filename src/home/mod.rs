@@ -158,7 +158,8 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                                     }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
                                     (Box::new(|rc, list_item| {
                                         let (wrapper, song, _) = &*rc;
-                                        let label = Label::builder().label(song.title_str()).ellipsized().build();
+                                        let label = Label::builder().label(song.title_str()).ellipsized()
+                                            .margin_top(4).margin_bottom(4).build();
                                         bold_if_now_playing(song, list_item, label, wrapper);
                                     }), true),
                                     (Box::new(|rc, list_item| {
