@@ -1,6 +1,5 @@
-use std::borrow::Cow;
+use std::sync::Once;
 use std::time::Duration;
-use adw::gio::File;
 use adw::prelude::*;
 use ContentFit::Contain;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
@@ -20,6 +19,7 @@ use crate::collection::song::WithPath;
 use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, util};
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
+use crate::config::Config;
 use crate::controls::mpris::mpris_player;
 use crate::controls::playbin::{PLAYBIN, Playbin, URI};
 use crate::db::get_connection;
@@ -30,7 +30,7 @@ use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::path as song_path;
 
-mod playbin;
+pub mod playbin;
 mod mpris;
 
 trait Playable {
@@ -52,19 +52,22 @@ impl Playable for Button {
     }
 }
 
+fn update_duration(label: &Label, scale: &Scale) {
+    if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
+        label.set_label(&format(duration));
+        scale.set_range(0.0, duration as f64);
+    }
+}
+
 pub fn media_controls() -> Wrapper {
+    let once = Once::new();
     let mpris_player = mpris_player();
     let now_playing = gtk::Box::builder().orientation(Horizontal)
         .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
     let song_info = gtk::Box::builder().orientation(Vertical).build();
     let unknown_album_file = IconTheme::for_display(&now_playing.display())
         .lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None, IconLookupFlags::empty()).file().unwrap();
-    let picture_file = if let Ok((song, _, collection)) = get_current_song(&mut get_connection()) {
-        Cow::Owned(File::for_path((&song, &collection).path()))
-    } else {
-        Cow::Borrowed(&unknown_album_file)
-    };
-    let album_picture = Picture::builder().content_fit(Contain).file(&*picture_file).build();
+    let album_picture = Picture::builder().content_fit(Contain).build();
     now_playing.append(&album_picture);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
@@ -103,13 +106,14 @@ pub fn media_controls() -> Wrapper {
         let position_label = position_label.clone();
         let progress_bar = progress_bar.clone();
         let scale = scale.clone();
+        let mpris_player = mpris_player.clone();
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
                 match PLAYBIN.get_duration() {
                     None => { warn!("cannot seek when duration is not available"); }
                     Some(duration) => {
-                        if let Err(error) = PLAYBIN.seek_internal(value as u64, &position_label, &progress_bar,
-                            duration, &scale) {
+                        if let Err(error) = PLAYBIN.seek_internal_and_mpris(value as u64, &position_label,
+                            &progress_bar, duration, &scale, &mpris_player) {
                             warn!("error trying to seek to {} {}", value, error);
                         }
                     }
@@ -185,12 +189,16 @@ pub fn media_controls() -> Wrapper {
                         _ => {}
                     }
                 }
-                AsyncDone(_) | DurationChanged(_) => {
-                    if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
-                        duration_label.set_label(&format(duration));
-                        scale.set_range(0.0, duration as f64);
-                    }
+                AsyncDone(_) => {
+                    once.call_once(|| {
+                        if let Ok((song, Config { current_song_position, .. }, _)) = get_current_song(&mut get_connection()) {
+                            PLAYBIN.seek_internal_and_mpris(current_song_position as u64, &position_label,
+                                &progress_bar, song.duration as u64, &scale, &mpris_player).unwrap();
+                        }
+                    });
+                    update_duration(&duration_label, &scale);
                 }
+                DurationChanged(_) => { update_duration(&duration_label, &scale); }
                 StreamStart(_) => {
                     let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
                     get_connection().transaction(|connection| {

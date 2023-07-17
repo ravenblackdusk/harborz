@@ -9,4 +9,5 @@ pub struct Config {
     pub window_width: i32,
     pub window_height: i32,
     pub maximized: i32,
+    pub current_song_position: i64,
 }

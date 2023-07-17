@@ -16,6 +16,7 @@ diesel::table! {
         window_width -> Integer,
         window_height -> Integer,
         maximized -> Integer,
+        current_song_position -> BigInt,
     }
 }
 

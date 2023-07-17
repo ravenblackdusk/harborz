@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use adw::{Application, ApplicationWindow, HeaderBar};
+use adw::glib::signal::Inhibit;
 use adw::prelude::*;
 use diesel::{ExpressionMethods, RunQueryDsl, update};
 use diesel::migration::Result;
 use diesel_migrations::MigrationHarness;
 use gtk::{Button, Label, MenuButton, Popover, ScrolledWindow, Widget};
 use gtk::Align::Fill;
-use gtk::gdk::SeatCapabilities;
 use gtk::glib::ExitCode;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
@@ -16,8 +16,9 @@ use crate::common::constant::APP_ID;
 use crate::common::gtk_box;
 use crate::config::Config;
 use crate::controls::media_controls;
+use crate::controls::playbin::{PLAYBIN, Playbin};
 use crate::db::get_connection;
-use crate::schema::config::{maximized, window_height, window_width};
+use crate::schema::config::{current_song_position, maximized, window_height, window_width};
 use crate::schema::config::dsl::config as config_table;
 
 mod schema;
@@ -36,14 +37,10 @@ fn main() -> Result<ExitCode> {
     application.connect_activate(|application| {
         let main_box = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
         let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home").build();
-        let window_builder = ApplicationWindow::builder().application(application).content(&main_box);
-        let window = if !main_box.display().default_seat().unwrap().capabilities().contains(SeatCapabilities::TOUCH) {
-            let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
-            window_builder.default_width(config.window_width).default_height(config.window_height)
-                .maximized(config.maximized == 1)
-        } else {
-            window_builder
-        }.build();
+        let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
+        let window = ApplicationWindow::builder().application(application).content(&main_box)
+            .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
+            .build();
         let add_collection_box = add_collection_box(&window);
         let media_controls = media_controls();
         let title = Label::new(Some("Harborz"));
@@ -83,14 +80,13 @@ fn main() -> Result<ExitCode> {
         main_box.append(&media_controls);
         bar.pack_start(&back_button);
         bar.pack_end(&menu_button);
-        window.connect_destroy({
-            let application = application.clone();
-            move |window| {
-                let (width, height) = window.default_size();
-                update(config_table).set((window_width.eq(width), window_height.eq(height),
-                    maximized.eq(if window.is_maximized() { 1 } else { 0 }))).execute(&mut get_connection()).unwrap();
-                application.quit();
-            }
+        window.connect_close_request(|window| {
+            let (width, height) = window.default_size();
+            update(config_table).set((window_width.eq(width), window_height.eq(height),
+                maximized.eq(if window.is_maximized() { 1 } else { 0 }),
+                current_song_position.eq(PLAYBIN.get_position().unwrap_or(0) as i64)
+            )).execute(&mut get_connection()).unwrap();
+            Inhibit(false)
         });
         window.present();
     });

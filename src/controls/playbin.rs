@@ -5,8 +5,9 @@ use diesel::{Connection, QueryDsl, RunQueryDsl};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
 use gstreamer::glib::{Cast, ObjectExt};
 use gstreamer::prelude::{ElementExt, ElementExtManual};
-use gstreamer::State::{Null, Playing};
+use gstreamer::State::*;
 use gtk::{Label, ProgressBar, Scale};
+use mpris_player::MprisPlayer;
 use once_cell::sync::Lazy;
 use crate::collection::model::Collection;
 use crate::collection::song::{get_current_album, Song};
@@ -21,13 +22,13 @@ use crate::schema::songs::{album, artist};
 use crate::schema::songs::dsl::songs;
 
 pub(in crate::controls) const URI: &'static str = "uri";
-pub(in crate::controls) static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
+pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     let playbin = ElementFactory::make("playbin3").build().unwrap().downcast::<Pipeline>().unwrap();
-    let path_buf = songs.inner_join(collections).inner_join(config)
-        .get_result::<(Song, Collection, Config)>(&mut get_connection()).map(|(song, collection, _)| {
-        (&song, &collection).path()
-    }).unwrap_or(PathBuf::from(""));
-    playbin.set_uri(&path_buf);
+    if let Ok((song, collection, _)) = songs.inner_join(collections).inner_join(config)
+        .get_result::<(Song, Collection, Config)>(&mut get_connection()) {
+        playbin.set_uri(&(&song, &collection).path());
+        playbin.set_state(Paused).unwrap();
+    }
     playbin.connect("about-to-finish", true, |_| {
         go_delta_song(1, false);
         None
@@ -35,12 +36,14 @@ pub(in crate::controls) static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     playbin
 });
 
-pub(in crate::controls) trait Playbin {
+pub trait Playbin {
     fn set_uri(&self, uri: &PathBuf);
     fn get_position(&self) -> Option<u64>;
     fn get_duration(&self) -> Option<u64>;
     fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64, scale: &Scale)
         -> anyhow::Result<()>;
+    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64,
+        scale: &Scale, mpris_player: &MprisPlayer) -> anyhow::Result<()>;
     fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, progress_bar: &ProgressBar, scale: &Scale);
 }
 
@@ -61,13 +64,18 @@ impl Playbin for Pipeline {
         progress_bar.set_fraction(value as f64 / duration as f64);
         Ok(scale.set_value(value as f64))
     }
+    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64,
+        scale: &Scale, mpris_player: &MprisPlayer) -> anyhow::Result<()> {
+        self.seek_internal(value, label, progress_bar, duration, scale)?;
+        Ok(mpris_player.set_position(value as i64))
+    }
     fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, progress_bar: &ProgressBar, scale: &Scale) {
         if let Some(position) = self.get_position() {
             let nanos = duration.as_nanos() as i64;
-            let duration = PLAYBIN.get_duration().unwrap();
+            let duration = self.get_duration().unwrap();
             self.seek_internal(
-                ((position as i64) + if forward { nanos } else { -nanos }).clamp(0, duration as i64) as u64, &label,
-                &progress_bar, duration, &scale,
+                ((position as i64) + if forward { nanos } else { -nanos }).clamp(0, duration as i64) as u64, label,
+                progress_bar, duration, scale
             ).unwrap();
         }
     }
