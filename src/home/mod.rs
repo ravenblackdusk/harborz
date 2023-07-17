@@ -4,7 +4,9 @@ use std::ops::Deref;
 use std::rc::Rc;
 use adw::gdk::gdk_pixbuf::Pixbuf;
 use adw::gdk::pango::{AttrInt, AttrList};
+use adw::glib::GString;
 use adw::prelude::*;
+use adw::WindowTitle;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
 use gtk::{ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, Picture, ScrolledWindow, SignalListItemFactory, Widget};
@@ -16,20 +18,23 @@ use gtk::pango::Weight;
 use crate::collection::model::Collection;
 use crate::collection::song::{get_current_album, join_path, WithCover};
 use crate::collection::song::Song;
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, util};
-use crate::common::util::format;
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
+use crate::common::util::{format, or_none};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
 use crate::db::get_connection;
+use crate::home::history::History;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::{album, artist, path as song_path};
 use crate::schema::songs::dsl::songs;
 
+pub mod history;
+
 fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>) + 'static>(
-    history: Option<Rc<RefCell<Vec<Box<dyn AsRef<Widget>>>>>>, scrolled_window: &ScrolledWindow, row_items: Vec<Rc<T>>,
-    columns: Vec<(Box<S>, bool)>, on_row_activated: F) {
+    history: Option<Rc<RefCell<Vec<(GString, GString, Box<dyn AsRef<Widget>>)>>>>, window_title: &WindowTitle,
+    scrolled_window: &ScrolledWindow, row_items: Vec<Rc<T>>, columns: Vec<(Box<S>, bool)>, on_row_activated: F) {
     let store = ListStore::new(BoxedAnyObject::static_type());
     for row_item in row_items.iter() {
         store.append(&BoxedAnyObject::new(row_item.clone()));
@@ -37,11 +42,15 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
     let column_view = ColumnView::builder().single_click_activate(true).model(&NoSelection::new(Some(store)))
         .show_row_separators(true).build();
     column_view.first_child().unwrap().set_visible(false);
-    column_view.connect_activate(move |column_view, row| {
-        if let Some(history) = &history {
-            (*history).borrow_mut().push(Box::new(column_view.clone()));
+    column_view.connect_activate({
+        let window_title = window_title.clone();
+        let scrolled_window = scrolled_window.clone();
+        move |_, row| {
+            if let Some(history) = &history {
+                (*history).push_window(&window_title, &scrolled_window);
+            }
+            on_row_activated(row_items[row as usize].clone());
         }
-        on_row_activated(row_items[row as usize].clone());
     });
     for (set_child, expand) in columns {
         let item_factory = SignalListItemFactory::new();
@@ -57,7 +66,7 @@ fn list_box<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>)
 }
 
 fn or_none_label(label: &Option<String>) -> Label {
-    Label::builder().label(util::or_none(label)).margin_ellipsized(4).bold().build()
+    Label::builder().label(or_none(label)).margin_ellipsized(4).bold().build()
 }
 
 fn next_icon() -> Image {
@@ -90,9 +99,9 @@ fn connect_bold_if_now_playing(song: &Song, current_song_id: Option<i32>, list_i
     });
 }
 
-pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dyn AsRef<Widget>>>>>,
-    media_controls: &Wrapper) {
-    list_box(Some(history.clone()), scrolled_window,
+pub fn set_body(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
+    history: Rc<RefCell<Vec<(GString, GString, Box<dyn AsRef<Widget>>)>>>, media_controls: &Wrapper) {
+    list_box(Some(history.clone()), window_title, scrolled_window,
         songs.group_by(artist).select((artist, count_distinct(album), count_star()))
             .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap().into_iter().map(Rc::new)
             .collect::<Vec<_>>(),
@@ -115,11 +124,14 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
             artist_row.append(&next_icon());
             list_item.set_child(Some(&artist_row));
         }), true)], {
+            let window_title = window_title.clone();
             let scrolled_window = scrolled_window.clone();
             let media_controls = media_controls.clone();
             move |rc| {
                 let (artist_string, _, _) = rc.borrow();
-                list_box(Some(history.clone()), &scrolled_window, songs.inner_join(collections)
+                window_title.set_title(or_none(artist_string));
+                window_title.set_subtitle("Albums");
+                list_box(Some(history.clone()), &window_title, &scrolled_window, songs.inner_join(collections)
                     .filter(artist.eq(artist_string)).group_by(album)
                     .select((album, count_star(), min(path), min(song_path)))
                     .get_results::<(Option<String>, i64, Option<String>, Option<String>)>(&mut get_connection())
@@ -150,14 +162,17 @@ pub fn set_body(scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Box<dy
                             list_item.set_child(Some(&album_row));
                         }), true),
                     ], {
+                        let window_title = window_title.clone();
                         let scrolled_window = scrolled_window.clone();
                         let artist_string = artist_string.clone();
                         let media_controls = media_controls.clone();
                         move |rc| {
                             let (album_string, _, _, _) = rc.borrow();
+                            window_title.set_title(or_none(album_string));
+                            window_title.set_subtitle("Songs");
                             let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection())
                                 .unwrap();
-                            list_box(None, &scrolled_window,
+                            list_box(None, &window_title, &scrolled_window,
                                 get_current_album(&artist_string, &album_string, &mut get_connection()).into_iter()
                                     .map(|(song, collection)| {
                                         Rc::new((media_controls.clone(), song, collection, current_song_id))
