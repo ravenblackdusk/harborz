@@ -86,13 +86,9 @@ pub fn media_controls() -> Wrapper {
     let artist_label = Label::builder().margin_ellipsized(4).build();
     song_info.append(&song_label);
     song_info.append(&artist_label);
-    let time_box = gtk::Box::builder().spacing(4).margin_start(4).build();
-    let position_label = Label::new(Some(&format(0)));
-    time_box.append(&position_label);
-    time_box.append(&Label::new(Some("/")));
+    let position_label = Label::builder().label(&format(0)).margin_ellipsized(4).build();
     let duration_label = Label::new(Some(&format(0)));
-    time_box.append(&duration_label);
-    song_info.append(&time_box);
+    song_info.append(&position_label);
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).build();

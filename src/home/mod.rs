@@ -75,15 +75,14 @@ fn next_icon() -> Image {
 
 fn bold_if_now_playing(label: &Label, row_id: i32, current_song_id: i32) {
     let attr_list = label.attributes().unwrap_or_else(AttrList::new);
-    label.set_attributes(Some(&if row_id == current_song_id {
+    attr_list.change(AttrInt::new_weight(if row_id == current_song_id {
         label.add_css_class("accent");
-        attr_list.change(AttrInt::new_weight(Weight::Bold));
-        attr_list
+        Weight::Bold
     } else {
         label.remove_css_class("accent");
-        attr_list.change(AttrInt::new_weight(Weight::Normal));
-        attr_list
+        Weight::Normal
     }));
+    label.set_attributes(Some(&attr_list));
 }
 
 fn connect_bold_if_now_playing(song: &Song, current_song_id: Option<i32>, list_item: &ListItem, label: Label,
