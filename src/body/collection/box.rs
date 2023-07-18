@@ -3,14 +3,14 @@ use diesel::{Connection, delete, ExpressionMethods, QueryDsl, RunQueryDsl, updat
 use gtk::{Button, Label, prelude};
 use gtk::Orientation::{Horizontal, Vertical};
 use prelude::*;
-use crate::collection::model::Collection;
+use crate::body::collection::model::Collection;
 use crate::common::{EllipsizedLabelBuilder, gtk_box};
 use crate::common::util::PathString;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::row;
 
-pub(in crate::collection) trait CollectionBox {
+pub(in crate::body::collection) trait CollectionBox {
     fn new() -> Self;
     fn add(&self, id: i32, path: &String);
 }

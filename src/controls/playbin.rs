@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Duration;
 use adw::prelude::RangeExt;
 use diesel::{Connection, QueryDsl, RunQueryDsl};
@@ -9,9 +10,7 @@ use gstreamer::State::*;
 use gtk::{Label, ProgressBar, Scale};
 use mpris_player::MprisPlayer;
 use once_cell::sync::Lazy;
-use crate::collection::model::Collection;
-use crate::collection::song::{get_current_album, Song};
-use crate::collection::song::WithPath;
+use crate::body::collection::model::Collection;
 use crate::common::util::format;
 use crate::config::Config;
 use crate::db::get_connection;
@@ -20,6 +19,8 @@ use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::{album, artist};
 use crate::schema::songs::dsl::songs;
+use crate::song::{get_current_album, Song};
+use crate::song::WithPath;
 
 pub(in crate::controls) const URI: &'static str = "uri";
 pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
@@ -86,7 +87,7 @@ pub(in crate::controls) fn go_delta_song(delta: i32, now: bool) {
         if let Ok((Some(current_song_id_int), artist_string, album_string)) = config.inner_join(songs)
             .select((current_song_id, artist, album))
             .get_result::<(Option<i32>, Option<String>, Option<String>)>(connection) {
-            let song_collections = get_current_album(&artist_string, &album_string, connection);
+            let song_collections = get_current_album(artist_string.map(Rc::new), album_string.map(Rc::new), connection);
             let delta_song_index = song_collections.iter().position(|(song, _)| { song.id == current_song_id_int })
                 .unwrap() as i32 + delta;
             if delta_song_index >= 0 && delta_song_index < song_collections.len() as i32 {

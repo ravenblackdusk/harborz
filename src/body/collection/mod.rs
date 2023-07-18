@@ -13,19 +13,18 @@ use gtk::{Button, FileDialog, ProgressBar};
 use gtk::gio::{Cancellable, File};
 use gtk::glib::timeout_add_local;
 use gtk::Orientation::Vertical;
-use crate::collection::model::Collection;
-use crate::collection::r#box::CollectionBox;
-use crate::collection::song::{import_songs, ImportProgress};
+use crate::body::collection::model::Collection;
+use crate::body::collection::r#box::CollectionBox;
 use crate::common::gtk_box;
 use crate::db::get_connection;
 use crate::schema::collections::{modified, path, row};
 use crate::schema::collections::dsl::collections;
+use crate::song::{import_songs, ImportProgress};
 
 mod r#box;
 pub mod model;
-pub mod song;
 
-pub fn add_collection_box(window: &ApplicationWindow) -> gtk::Box {
+pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Box {
     let add_collection_box = gtk_box(Vertical);
     let collection_box: gtk::Box = CollectionBox::new();
     let browse_button = Button::builder().label("browse").build();

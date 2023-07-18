@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
@@ -11,7 +12,7 @@ use gstreamer_pbutils::Discoverer;
 use gtk::glib::{Continue, timeout_add};
 use once_cell::sync::Lazy;
 use walkdir::WalkDir;
-use crate::collection::model::Collection;
+use crate::body::collection::model::Collection;
 use crate::common::util::PathString;
 use crate::config::Config;
 use crate::schema::collections::table as collections;
@@ -69,13 +70,13 @@ impl WithCover for PathBuf {
 
 static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(30)).unwrap() });
 
-pub(in crate::collection) enum ImportProgress {
+pub enum ImportProgress {
     CollectionStart(i32),
     Fraction(f64),
     CollectionEnd(i32, String),
 }
 
-pub(in crate::collection) fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
+pub fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Option<SystemTime> {
     sender.send(ImportProgress::CollectionStart(collection.id)).unwrap();
     let total = WalkDir::new(&collection.path).into_iter().count() as f64;
@@ -131,8 +132,8 @@ pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<Sqli
     Ok(songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)?)
 }
 
-pub fn get_current_album(artist_string: &Option<String>, album_string: &Option<String>,
+pub fn get_current_album(artist_string: Option<Rc<String>>, album_string: Option<Rc<String>>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Vec<(Song, Collection)> {
-    songs.inner_join(collections).filter(artist.eq(artist_string).and(album.eq(album_string)))
+    songs.inner_join(collections).filter(artist.eq(artist_string.as_deref()).and(album.eq(album_string.as_deref())))
         .order_by((track_number, id)).get_results::<(Song, Collection)>(connection).unwrap()
 }

@@ -21,6 +21,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    history_bodies (id) {
+        id -> Integer,
+        query -> Nullable<Text>,
+        body_type -> crate::body::BodyTypeMapping,
+    }
+}
+
+diesel::table! {
     songs (id) {
         id -> Integer,
         path -> Text,
@@ -42,5 +50,6 @@ diesel::joinable!(songs -> collections (collection_id));
 diesel::allow_tables_to_appear_in_same_query!(
     collections,
     config,
+    history_bodies,
     songs,
 );

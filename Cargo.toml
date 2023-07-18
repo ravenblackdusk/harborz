@@ -12,6 +12,7 @@ gtk = { package = "gtk4", version = "0.6.6", features = ["v4_10"] }
 adw = { package = "libadwaita", version = "0.4.4", features = ["v1_2"] }
 diesel = { version = "2.1.0", features = ["r2d2", "sqlite", "returning_clauses_for_sqlite_3_35"] }
 diesel_migrations = "2.1.0"
+diesel-derive-enum = { version = "2.1.0", features = ["sqlite"] }
 walkdir = "2.3.3"
 gstreamer = "0.20.6"
 gstreamer-pbutils = "0.20.6"
