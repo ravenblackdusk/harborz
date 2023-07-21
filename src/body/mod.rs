@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::{ApplicationWindow, WindowTitle};
@@ -16,7 +16,7 @@ use gtk::Orientation::Vertical;
 use gtk::pango::Weight;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
+use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -38,6 +38,7 @@ pub struct HistoryBody {
     pub id: i32,
     pub query: Option<String>,
     pub body_type: BodyType,
+    pub scroll_adjustment: Option<f32>,
 }
 
 #[derive(Debug, PartialEq, diesel_derive_enum::DbEnum)]
@@ -53,6 +54,7 @@ pub struct Body {
     pub subtitle: Rc<String>,
     pub body_type: BodyType,
     pub query: Option<Rc<String>>,
+    pub scroll_adjustment: Cell<Option<f32>>,
     pub widget: Box<dyn AsRef<Widget>>,
 }
 
@@ -113,11 +115,20 @@ fn connect_bold_if_now_playing(song: &Song, current_song_id: Option<i32>, list_i
 }
 
 impl Body {
-    pub fn set(self, window_title: &WindowTitle, scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Self>>>) {
+    pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Body, bool)>>>) {
+        self.scroll_adjustment.set(scroll_adjustment);
+        history.borrow_mut().push((self, true));
+    }
+    pub fn set(self, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
+        history: Rc<RefCell<Vec<(Self, bool)>>>, adjust_scroll: bool) {
         window_title.set_title(self.title.as_str());
         window_title.set_subtitle(self.subtitle.as_str());
+        let mut history = history.borrow_mut();
+        if let Some((Body { scroll_adjustment, .. }, _)) = history.last() {
+            scroll_adjustment.set(scrolled_window.get_adjustment());
+        }
         scrolled_window.set_child(Some((*self.widget).as_ref()));
-        history.borrow_mut().push(self);
+        history.push((self, adjust_scroll));
     }
     pub fn collections(window: &ApplicationWindow) -> Self {
         Self {
@@ -125,16 +136,18 @@ impl Body {
             subtitle: Rc::new(String::from("Collection")),
             body_type: BodyType::Collections,
             query: None,
+            scroll_adjustment: Cell::new(None),
             widget: Box::new(add_collection_box(&window)),
         }
     }
-    pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<Self>>>,
-        media_controls: &Wrapper) -> Self {
+    pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
+        history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper) -> Self {
         Self {
             body_type: BodyType::Artists,
             query: None,
             title: Rc::new(String::from("Harborz")),
             subtitle: Rc::new(String::from("Artists")),
+            scroll_adjustment: Cell::new(None),
             widget: Box::new(
                 column_view(
                     songs.group_by(artist).select((artist, count_distinct(album), count_star()))
@@ -165,7 +178,7 @@ impl Body {
                         move |rc| {
                             let (artist_string, _, _) = rc.borrow();
                             Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(), &media_controls)
-                                .set(&window_title, &scrolled_window, history.clone());
+                                .set(&window_title, &scrolled_window, history.clone(), false);
                         }
                     },
                 )
@@ -173,13 +186,14 @@ impl Body {
         }
     }
     pub fn albums(artist_string: Option<String>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<Self>>>, media_controls: &Wrapper) -> Self {
+        history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper) -> Self {
         let artist_string = artist_string.map(Rc::new);
         Self {
             body_type: BodyType::Albums,
             query: artist_string.clone(),
             title: or_none_static(artist_string.clone()),
             subtitle: Rc::new(String::from("Albums")),
+            scroll_adjustment: Cell::new(None),
             widget: Box::new(
                 column_view(
                     songs.inner_join(collections)
@@ -217,7 +231,7 @@ impl Body {
                         move |rc| {
                             let (album_string, _, _, _) = rc.borrow();
                             Self::songs(album_string.clone(), artist_string.clone(), &media_controls)
-                                .set(&window_title, &scrolled_window, history.clone());
+                                .set(&window_title, &scrolled_window, history.clone(), false);
                         }
                     },
                 )
@@ -232,6 +246,7 @@ impl Body {
             query: album_string.clone(),
             title: or_none_static(album_string.clone()),
             subtitle: Rc::new(String::from("Songs")),
+            scroll_adjustment: Cell::new(None),
             widget: Box::new(
                 column_view(
                     get_current_album(artist_string, album_string, &mut get_connection()).into_iter()

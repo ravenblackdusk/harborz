@@ -1,6 +1,10 @@
+use std::cell::Cell;
+use std::time::Duration;
 use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
-use gtk::{Box, Orientation};
+use adw::glib::timeout_add_local_once;
+use gtk::{Box, Orientation, ScrolledWindow};
 use gtk::builders::{BoxBuilder, LabelBuilder};
+use gtk::prelude::AdjustmentExt;
 
 pub mod util;
 pub mod wrapper;
@@ -49,5 +53,24 @@ impl SubscriptLabelBuilder for LabelBuilder {
         let attr_list = AttrList::new();
         attr_list.insert(AttrInt::new_font_scale(FontScale::Subscript));
         self.attributes(&attr_list)
+    }
+}
+
+pub trait AdjustableScrolledWindow {
+    fn get_adjustment(&self) -> Option<f32>;
+    fn adjust(&self, value: &Cell<Option<f32>>);
+}
+
+impl AdjustableScrolledWindow for ScrolledWindow {
+    fn get_adjustment(&self) -> Option<f32> {
+        Some(self.vadjustment().value() as f32)
+    }
+    fn adjust(&self, value: &Cell<Option<f32>>) {
+        if let Some(value) = value.get() {
+            timeout_add_local_once(Duration::from_millis(100), {
+                let this = self.clone();
+                move || { this.clone().vadjustment().set_value(value as f64); }
+            });
+        }
     }
 }

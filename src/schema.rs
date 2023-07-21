@@ -10,8 +10,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    config (volume) {
-        volume -> Float,
+    config (current_song_id) {
         current_song_id -> Nullable<Integer>,
         window_width -> Integer,
         window_height -> Integer,
@@ -25,6 +24,7 @@ diesel::table! {
         id -> Integer,
         query -> Nullable<Text>,
         body_type -> crate::body::BodyTypeMapping,
+        scroll_adjustment -> Nullable<Float>,
     }
 }
 
