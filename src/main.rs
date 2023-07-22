@@ -41,7 +41,7 @@ fn main() -> Result<ExitCode> {
         let bodies = history_bodies.get_results::<HistoryBody>(&mut get_connection()).unwrap();
         let empty_history = bodies.is_empty();
         let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home")
-            .sensitive(bodies.len() > 1).build();
+            .visible(bodies.len() > 1).build();
         let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
         let window = ApplicationWindow::builder().application(application).content(&main_box)
             .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
@@ -63,7 +63,7 @@ fn main() -> Result<ExitCode> {
             move |back_button| {
                 let mut history = history.borrow_mut();
                 history.pop();
-                back_button.set_sensitive(history.len() > 1);
+                back_button.set_visible(history.len() > 1);
                 if let Some((Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. },
                     adjust_scroll)) = history.last() {
                     window_title.set_title(title.as_str());

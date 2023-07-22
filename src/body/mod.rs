@@ -3,7 +3,6 @@ use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::{ApplicationWindow, WindowTitle};
-use adw::gdk::pango::{AttrInt, AttrList};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
@@ -11,10 +10,9 @@ use gtk::{Button, ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelect
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
-use gtk::pango::Weight;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
+use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -87,27 +85,23 @@ fn next_icon() -> Image {
     Image::builder().icon_name("go-next-symbolic").build()
 }
 
-fn bold_if_now_playing(label: &Label, row_id: i32, current_song_id: i32) {
-    let attr_list = label.attributes().unwrap_or_else(AttrList::new);
-    attr_list.change(AttrInt::new_weight(if row_id == current_song_id {
+fn accent_if_now_playing(label: &Label, row_id: i32, current_song_id: i32) {
+    if row_id == current_song_id {
         label.add_css_class("accent");
-        Weight::Bold
     } else {
         label.remove_css_class("accent");
-        Weight::Normal
-    }));
-    label.set_attributes(Some(&attr_list));
+    }
 }
 
-fn connect_bold_if_now_playing(song: &Song, current_song_id: Option<i32>, list_item: &ListItem, label: Label,
+fn connect_accent_if_now_playing(song: &Song, current_song_id: Option<i32>, list_item: &ListItem, label: Label,
     wrapper: &Wrapper) {
     let id = song.id;
     if let Some(current_song_id) = current_song_id {
-        bold_if_now_playing(&label, id, current_song_id);
+        accent_if_now_playing(&label, id, current_song_id);
     }
     list_item.set_child(Some(&label));
     wrapper.connect_local(STREAM_STARTED, true, move |params| {
-        bold_if_now_playing(&label, id, params[1].get::<i32>().unwrap());
+        accent_if_now_playing(&label, id, params[1].get::<i32>().unwrap());
         None
     });
 }
@@ -119,7 +113,7 @@ impl Body {
     }
     pub fn set(self, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Self, bool)>>>, back_button: &Option<Button>) {
-        if let Some(back_button) = back_button { back_button.set_sensitive(true); }
+        if let Some(back_button) = back_button { back_button.set_visible(true); }
         window_title.set_title(self.title.as_str());
         window_title.set_subtitle(self.subtitle.as_str());
         let mut history = history.borrow_mut();
@@ -256,18 +250,24 @@ impl Body {
                     vec![
                         (Box::new(|rc: Rc<(Wrapper, Song, Collection, Option<i32>)>, list_item: &ListItem| {
                             let (wrapper, song, _, current_song_id) = &*rc;
-                            let label = Label::new(song.track_number.map(|it| { it.to_string() }).as_deref());
-                            connect_bold_if_now_playing(song, *current_song_id, list_item, label, wrapper);
+                            let label_builder = Label::builder().bold();
+                            let label = if let Some(track_number) = song.track_number {
+                                label_builder.label(track_number.to_string())
+                            } else {
+                                label_builder
+                            }.build();
+                            connect_accent_if_now_playing(song, *current_song_id, list_item, label, wrapper);
                         }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection, Option<i32>)>, &ListItem)>, false),
                         (Box::new(|rc, list_item| {
                             let (wrapper, song, _, current_song_id) = &*rc;
-                            let label = Label::builder().label(song.title_str()).ellipsized().margin_top(4).margin_bottom(4).build();
-                            connect_bold_if_now_playing(song, *current_song_id, list_item, label, wrapper);
+                            let label = Label::builder().label(song.title_str()).ellipsized().bold()
+                                .margin_top(4).margin_bottom(4).build();
+                            connect_accent_if_now_playing(song, *current_song_id, list_item, label, wrapper);
                         }), true),
                         (Box::new(|rc, list_item| {
                             let (wrapper, song, _, current_song_id) = &*rc;
-                            let label = Label::builder().label(&format(song.duration as u64)).subscript().build();
-                            connect_bold_if_now_playing(song, *current_song_id, list_item, label, wrapper);
+                            let label = Label::builder().label(&format(song.duration as u64)).bold_subscript().build();
+                            connect_accent_if_now_playing(song, *current_song_id, list_item, label, wrapper);
                         }), false),
                     ], {
                         let media_controls = media_controls.clone();

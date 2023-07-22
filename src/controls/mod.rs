@@ -7,7 +7,7 @@ use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, IconLookupFlags, IconTheme, Image, Inhibit, Label, ProgressBar, Scale, ScrollType, TextDirection};
+use gtk::{Button, CssProvider, IconLookupFlags, IconTheme, Image, Inhibit, Label, ProgressBar, Scale, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION, TextDirection};
 use gtk::Orientation::{Horizontal, Vertical};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
@@ -90,7 +90,11 @@ pub fn media_controls() -> Wrapper {
     song_info.append(&position_label);
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
-    let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).build();
+    let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-box").build();
+    let css_provider = CssProvider::new();
+    css_provider.load_from_data("#accent-box { background-color: @accent_bg_color; }");
+    style_context_add_provider_for_display(&now_playing_and_progress.display(), &css_provider,
+        STYLE_PROVIDER_PRIORITY_APPLICATION);
     let progress_bar = ProgressBar::new();
     progress_bar.add_css_class("osd");
     now_playing_and_progress.append(&progress_bar);

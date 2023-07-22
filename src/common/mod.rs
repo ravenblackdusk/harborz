@@ -56,6 +56,19 @@ impl SubscriptLabelBuilder for LabelBuilder {
     }
 }
 
+pub trait BoldSubscriptLabelBuilder {
+    fn bold_subscript(self) -> LabelBuilder;
+}
+
+impl BoldSubscriptLabelBuilder for LabelBuilder {
+    fn bold_subscript(self) -> LabelBuilder {
+        let attr_list = AttrList::new();
+        attr_list.insert(AttrInt::new_font_scale(FontScale::Subscript));
+        attr_list.insert(AttrInt::new_weight(Weight::Bold));
+        self.attributes(&attr_list)
+    }
+}
+
 pub trait AdjustableScrolledWindow {
     fn get_adjustment(&self) -> Option<f32>;
     fn adjust(&self, value: &Cell<Option<f32>>);
