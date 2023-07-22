@@ -7,7 +7,7 @@ use adw::gdk::pango::{AttrInt, AttrList};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
-use gtk::{ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
+use gtk::{Button, ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
@@ -118,7 +118,8 @@ impl Body {
         history.borrow_mut().push((self, true));
     }
     pub fn set(self, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Self, bool)>>>, adjust_scroll: bool) {
+        history: Rc<RefCell<Vec<(Self, bool)>>>, back_button: &Option<Button>) {
+        if let Some(back_button) = back_button { back_button.set_sensitive(true); }
         window_title.set_title(self.title.as_str());
         window_title.set_subtitle(self.subtitle.as_str());
         let mut history = history.borrow_mut();
@@ -126,7 +127,7 @@ impl Body {
             scroll_adjustment.set(scrolled_window.get_adjustment());
         }
         scrolled_window.set_child(Some((*self.widget).as_ref()));
-        history.push((self, adjust_scroll));
+        history.push((self, false));
     }
     pub fn collections(window: &ApplicationWindow) -> Self {
         Self {
@@ -139,7 +140,7 @@ impl Body {
         }
     }
     pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper) -> Self {
+        history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper, back_button: &Option<Button>) -> Self {
         Self {
             body_type: BodyType::Artists,
             query: None,
@@ -173,10 +174,12 @@ impl Body {
                         let window_title = window_title.clone();
                         let scrolled_window = scrolled_window.clone();
                         let media_controls = media_controls.clone();
+                        let back_button = back_button.clone();
                         move |rc| {
                             let (artist_string, _, _) = rc.borrow();
-                            Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(), &media_controls)
-                                .set(&window_title, &scrolled_window, history.clone(), false);
+                            Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(),
+                                &media_controls
+                            ).set(&window_title, &scrolled_window, history.clone(), &back_button);
                         }
                     },
                 )
@@ -229,7 +232,7 @@ impl Body {
                         move |rc| {
                             let (album_string, _, _, _) = rc.borrow();
                             Self::songs(album_string.clone(), artist_string.clone(), &media_controls)
-                                .set(&window_title, &scrolled_window, history.clone(), false);
+                                .set(&window_title, &scrolled_window, history.clone(), &None);
                         }
                     },
                 )

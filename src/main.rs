@@ -38,7 +38,10 @@ fn main() -> Result<ExitCode> {
     let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(|application| {
         let main_box = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
-        let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home").build();
+        let bodies = history_bodies.get_results::<HistoryBody>(&mut get_connection()).unwrap();
+        let empty_history = bodies.is_empty();
+        let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home")
+            .sensitive(bodies.len() > 1).build();
         let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
         let window = ApplicationWindow::builder().application(application).content(&main_box)
             .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
@@ -57,17 +60,16 @@ fn main() -> Result<ExitCode> {
             let history = history.clone();
             let window_title = window_title.clone();
             let scrolled_window = scrolled_window.clone();
-            move |_| {
+            move |back_button| {
                 let mut history = history.borrow_mut();
-                if history.len() > 1 {
-                    history.pop();
-                    if let Some((Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. },
-                        adjust_scroll)) = history.last() {
-                        window_title.set_title(title.as_str());
-                        window_title.set_subtitle(subtitle.as_str());
-                        scrolled_window.set_child(Some((**widget).as_ref()));
-                        if *adjust_scroll { scrolled_window.adjust(body_scroll_adjustment); }
-                    }
+                history.pop();
+                back_button.set_sensitive(history.len() > 1);
+                if let Some((Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. },
+                    adjust_scroll)) = history.last() {
+                    window_title.set_title(title.as_str());
+                    window_title.set_subtitle(subtitle.as_str());
+                    scrolled_window.set_child(Some((**widget).as_ref()));
+                    if *adjust_scroll { scrolled_window.adjust(body_scroll_adjustment); }
                 }
             }
         });
@@ -77,22 +79,23 @@ fn main() -> Result<ExitCode> {
             let window_title = window_title.clone();
             let scrolled_window = scrolled_window.clone();
             let menu_button = menu_button.clone();
+            let back_button = back_button.clone();
             move |_| {
                 if history.borrow().last().unwrap().0.body_type != BodyType::Collections {
-                    Body::collections(&window).set(&window_title, &scrolled_window, history.clone(), false);
+                    Body::collections(&window)
+                        .set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
                 }
                 menu_button.popdown();
             }
         });
         let mut artist: Option<String> = None;
-        let bodies = history_bodies.get_results::<HistoryBody>(&mut get_connection()).unwrap();
-        let empty_history = bodies.is_empty();
         for HistoryBody { query: body_query, body_type: body_body_type, scroll_adjustment: body_scroll_adjustment, .. }
         in bodies {
             match body_body_type {
                 BodyType::Artists => {
-                    Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls)
-                        .put_to_history(body_scroll_adjustment, history.clone());
+                    Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls,
+                        &Some(back_button.clone())
+                    ).put_to_history(body_scroll_adjustment, history.clone());
                 }
                 BodyType::Albums => {
                     artist = body_query;
@@ -109,8 +112,8 @@ fn main() -> Result<ExitCode> {
             }
         }
         if empty_history {
-            Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls)
-                .set(&window_title, &scrolled_window, history.clone(), false);
+            Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls, &Some(back_button.clone()))
+                .set(&window_title, &scrolled_window, history.clone(), &None);
         } else if let Some((Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. }, _))
             = history.borrow().last() {
             window_title.set_title(title.as_str());
