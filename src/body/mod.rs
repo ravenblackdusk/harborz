@@ -12,7 +12,7 @@ use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
+use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, unknown_album_path};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -172,7 +172,7 @@ impl Body {
                         move |rc| {
                             let (artist_string, _, _) = rc.borrow();
                             Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(),
-                                &media_controls
+                                &media_controls,
                             ).set(&window_title, &scrolled_window, history.clone(), &back_button);
                         }
                     },
@@ -183,6 +183,7 @@ impl Body {
     pub fn albums(artist_string: Option<String>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper) -> Self {
         let artist_string = artist_string.map(Rc::new);
+        let unknown_album_path = unknown_album_path(&scrolled_window.display());
         Self {
             body_type: BodyType::Albums,
             query: artist_string.clone(),
@@ -197,14 +198,14 @@ impl Body {
                         .get_results::<(Option<String>, i64, Option<String>, Option<String>)>(&mut get_connection())
                         .unwrap().into_iter().map(Rc::new).collect::<Vec<_>>(),
                     vec![
-                        (Box::new(|rc: Rc<(Option<String>, i64, Option<String>, Option<String>)>, list_item: &ListItem| {
+                        (Box::new(move |rc: Rc<(Option<String>, i64, Option<String>, Option<String>)>,
+                            list_item: &ListItem| {
                             let (_, _, collection_path, album_song_path) = rc.borrow();
-                            let cover = join_path(&collection_path.clone().unwrap(), &album_song_path.clone().unwrap()).cover();
-                            if cover.exists() {
-                                let image = Image::builder().pixel_size(38).build();
-                                image.set_from_file(Some(cover));
-                                list_item.set_child(Some(&image));
-                            }
+                            let cover = join_path(&collection_path.clone().unwrap(),
+                                &album_song_path.clone().unwrap()).cover();
+                            let image = Image::builder().pixel_size(38).build();
+                            image.set_from_file(cover.exists().then_some(cover).or(unknown_album_path.clone()));
+                            list_item.set_child(Some(&image));
                         }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),
                         (Box::new(|rc, list_item| {
                             let (album_string, count, _, _) = rc.borrow();

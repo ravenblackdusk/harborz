@@ -7,7 +7,7 @@ use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, CssProvider, IconLookupFlags, IconTheme, Image, Inhibit, Label, ProgressBar, Scale, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION, TextDirection};
+use gtk::{Button, CssProvider, Image, Inhibit, Label, ProgressBar, Scale, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Orientation::{Horizontal, Vertical};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
@@ -15,7 +15,7 @@ use util::format;
 use crate::body::collection::model::Collection;
 use crate::song::{get_current_song, join_path, Song, WithCover};
 use crate::song::WithPath;
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, util};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, unknown_album_path, util};
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -61,12 +61,16 @@ fn update_duration(label: &Label, scale: &Scale) {
 pub fn media_controls() -> Wrapper {
     let once = Once::new();
     let mpris_player = mpris_player();
-    let now_playing = gtk::Box::builder().orientation(Horizontal)
+    let now_playing = gtk::Box::builder().orientation(Horizontal).name("accent-box")
         .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
-    let song_info = gtk::Box::builder().orientation(Vertical).build();
-    let unknown_album_file = IconTheme::for_display(&now_playing.display())
-        .lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None, IconLookupFlags::empty()).file().unwrap();
+    let css_provider = CssProvider::new();
+    css_provider.load_from_data("#accent-box { background-color: @accent_bg_color; }");
+    style_context_add_provider_for_display(&now_playing.display(), &css_provider, STYLE_PROVIDER_PRIORITY_APPLICATION);
+    let progress_bar = ProgressBar::new();
+    progress_bar.add_css_class("osd");
+    let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
+    let unknown_album_path = unknown_album_path(&album_image.display());
     now_playing.append(&album_image);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
@@ -90,13 +94,7 @@ pub fn media_controls() -> Wrapper {
     song_info.append(&position_label);
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
-    let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-box").build();
-    let css_provider = CssProvider::new();
-    css_provider.load_from_data("#accent-box { background-color: @accent_bg_color; }");
-    style_context_add_provider_for_display(&now_playing_and_progress.display(), &css_provider,
-        STYLE_PROVIDER_PRIORITY_APPLICATION);
-    let progress_bar = ProgressBar::new();
-    progress_bar.add_css_class("osd");
+    let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).build();
     now_playing_and_progress.append(&progress_bar);
     now_playing_and_progress.append(&now_playing);
     play_pause.connect_clicked(move |play_pause| {
@@ -222,7 +220,7 @@ pub fn media_controls() -> Wrapper {
                             album_image.set_from_file(Some(&cover));
                             cover.to_str().map(|it| { format!("file:{}", it) })
                         } else {
-                            album_image.set_from_file(unknown_album_file.path());
+                            album_image.set_from_file(unknown_album_path.clone());
                             None
                         };
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);

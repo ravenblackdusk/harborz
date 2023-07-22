@@ -1,8 +1,11 @@
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::time::Duration;
+use adw::gdk::Display;
 use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
 use adw::glib::timeout_add_local_once;
-use gtk::{Box, Orientation, ScrolledWindow};
+use adw::prelude::FileExt;
+use gtk::{Box, IconLookupFlags, IconTheme, Orientation, ScrolledWindow, TextDirection};
 use gtk::builders::{BoxBuilder, LabelBuilder};
 use gtk::prelude::AdjustmentExt;
 
@@ -86,4 +89,9 @@ impl AdjustableScrolledWindow for ScrolledWindow {
             });
         }
     }
+}
+
+pub fn unknown_album_path(display: &Display) -> Option<PathBuf> {
+    IconTheme::for_display(display).lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None,
+        IconLookupFlags::empty()).file().unwrap().path()
 }
