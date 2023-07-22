@@ -204,7 +204,7 @@ impl Body {
                             let (_, _, collection_path, album_song_path) = rc.borrow();
                             let cover = join_path(&collection_path.clone().unwrap(), &album_song_path.clone().unwrap()).cover();
                             if cover.exists() {
-                                let image = Image::builder().pixel_size(76).build();
+                                let image = Image::builder().pixel_size(38).build();
                                 image.set_from_file(Some(cover));
                                 list_item.set_child(Some(&image));
                             }

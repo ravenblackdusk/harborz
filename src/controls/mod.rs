@@ -66,7 +66,7 @@ pub fn media_controls() -> Wrapper {
     let song_info = gtk::Box::builder().orientation(Vertical).build();
     let unknown_album_file = IconTheme::for_display(&now_playing.display())
         .lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None, IconLookupFlags::empty()).file().unwrap();
-    let album_image = Image::builder().pixel_size(111).build();
+    let album_image = Image::builder().pixel_size(56).build();
     now_playing.append(&album_image);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
