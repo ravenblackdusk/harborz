@@ -1,14 +1,13 @@
 use std::sync::Once;
 use std::time::Duration;
 use adw::prelude::*;
-use ContentFit::Contain;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
 use gstreamer::ClockTime;
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, ContentFit, IconLookupFlags, IconTheme, Inhibit, Label, Picture, ProgressBar, Scale, ScrollType, TextDirection};
+use gtk::{Button, IconLookupFlags, IconTheme, Image, Inhibit, Label, ProgressBar, Scale, ScrollType, TextDirection};
 use gtk::Orientation::{Horizontal, Vertical};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
@@ -67,8 +66,8 @@ pub fn media_controls() -> Wrapper {
     let song_info = gtk::Box::builder().orientation(Vertical).build();
     let unknown_album_file = IconTheme::for_display(&now_playing.display())
         .lookup_icon("audio-x-generic", &[], 128, 1, TextDirection::None, IconLookupFlags::empty()).file().unwrap();
-    let album_picture = Picture::builder().content_fit(Contain).build();
-    now_playing.append(&album_picture);
+    let album_image = Image::builder().pixel_size(111).build();
+    now_playing.append(&album_image);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
     play_pause.play();
@@ -216,10 +215,10 @@ pub fn media_controls() -> Wrapper {
                         song_label.set_label(&title);
                         let cover = (&song, &collection).path().cover();
                         let art_url = if cover.exists() {
-                            album_picture.set_filename(Some(&cover));
+                            album_image.set_from_file(Some(&cover));
                             cover.to_str().map(|it| { format!("file:{}", it) })
                         } else {
-                            album_picture.set_file(Some(&unknown_album_file));
+                            album_image.set_from_file(unknown_album_file.path());
                             None
                         };
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);

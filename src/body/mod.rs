@@ -3,13 +3,11 @@ use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::{ApplicationWindow, WindowTitle};
-use adw::gdk::gdk_pixbuf::Pixbuf;
 use adw::gdk::pango::{AttrInt, AttrList};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
-use gtk::{ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, Picture, ScrolledWindow, SignalListItemFactory, Widget};
-use gtk::ContentFit::Contain;
+use gtk::{ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::gio::ListStore;
 use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
@@ -206,9 +204,9 @@ impl Body {
                             let (_, _, collection_path, album_song_path) = rc.borrow();
                             let cover = join_path(&collection_path.clone().unwrap(), &album_song_path.clone().unwrap()).cover();
                             if cover.exists() {
-                                let picture = Picture::builder().content_fit(Contain).build();
-                                picture.set_pixbuf(Some(&Pixbuf::from_file_at_scale(cover, -1, 70, true).unwrap()));
-                                list_item.set_child(Some(&picture));
+                                let image = Image::builder().pixel_size(76).build();
+                                image.set_from_file(Some(cover));
+                                list_item.set_child(Some(&image));
                             }
                         }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),
                         (Box::new(|rc, list_item| {
