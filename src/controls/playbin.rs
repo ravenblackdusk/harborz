@@ -8,7 +8,6 @@ use gstreamer::glib::{Cast, ObjectExt};
 use gstreamer::prelude::{ElementExt, ElementExtManual};
 use gstreamer::State::*;
 use gtk::{Label, ProgressBar, Scale};
-use mpris_player::MprisPlayer;
 use once_cell::sync::Lazy;
 use crate::body::collection::model::Collection;
 use crate::common::util::format;
@@ -42,8 +41,6 @@ pub trait Playbin {
     fn get_position(&self) -> Option<u64>;
     fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>, scale: &Scale)
         -> anyhow::Result<()>;
-    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>,
-        scale: &Scale, mpris_player: &MprisPlayer) -> anyhow::Result<()>;
     fn simple_seek(&self, delta: Duration, duration: Option<u64>, forward: bool, label: &Label,
         progress_bar: &ProgressBar, scale: &Scale);
 }
@@ -63,11 +60,6 @@ impl Playbin for Pipeline {
             progress_bar.set_fraction(value as f64 / duration as f64);
         }
         Ok(scale.set_value(value as f64))
-    }
-    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>,
-        scale: &Scale, mpris_player: &MprisPlayer) -> anyhow::Result<()> {
-        self.seek_internal(value, label, progress_bar, duration, scale)?;
-        Ok(mpris_player.set_position(value as i64))
     }
     fn simple_seek(&self, delta: Duration, duration: Option<u64>, forward: bool, label: &Label,
         progress_bar: &ProgressBar, scale: &Scale) {

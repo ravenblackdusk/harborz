@@ -116,11 +116,9 @@ pub fn media_controls() -> Wrapper {
         let position_label = position_label.clone();
         let progress_bar = progress_bar.clone();
         let scale = scale.clone();
-        let mpris_player = mpris_player.clone();
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
-                if let Err(error) = PLAYBIN.seek_internal_and_mpris(value as u64, &position_label, &progress_bar,
-                    duration, &scale, &mpris_player) {
+                if let Err(error) = PLAYBIN.seek_internal(value as u64, &position_label, &progress_bar, duration, &scale) {
                     warn!("error trying to seek to {} {}", value, error);
                 }
             }
@@ -176,7 +174,6 @@ pub fn media_controls() -> Wrapper {
                                 let position_label = position_label.clone();
                                 let scale = scale.clone();
                                 let progress_bar = progress_bar.clone();
-                                let mpris_player = mpris_player.clone();
                                 move || {
                                     if let Some(position) = PLAYBIN.get_position() {
                                         position_label.set_label(&format(position));
@@ -184,7 +181,6 @@ pub fn media_controls() -> Wrapper {
                                         if let Some(duration) = duration {
                                             progress_bar.set_fraction(position as f64 / duration as f64);
                                         }
-                                        mpris_player.set_position(position as i64);
                                     }
                                     Continue(PLAYBIN.current_state() == Playing || PLAYBIN.pending_state() == Playing)
                                 }
@@ -197,8 +193,8 @@ pub fn media_controls() -> Wrapper {
                 AsyncDone(_) => {
                     once.call_once(|| {
                         if let Ok((song, Config { current_song_position, .. }, _)) = get_current_song(&mut get_connection()) {
-                            PLAYBIN.seek_internal_and_mpris(current_song_position as u64, &position_label,
-                                &progress_bar, Some(song.duration as u64), &scale, &mpris_player).unwrap();
+                            PLAYBIN.seek_internal(current_song_position as u64, &position_label, &progress_bar,
+                                Some(song.duration as u64), &scale).unwrap();
                         }
                     });
                     update_duration(&mut duration, &duration_label, &scale);
