@@ -61,12 +61,15 @@ fn update_duration(label: &Label, scale: &Scale) {
 pub fn media_controls() -> Wrapper {
     let once = Once::new();
     let mpris_player = mpris_player();
-    let now_playing = gtk::Box::builder().orientation(Horizontal).name("accent-box")
+    let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
+    let now_playing = gtk::Box::builder().orientation(Horizontal)
         .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
     let css_provider = CssProvider::new();
-    css_provider.load_from_data("#accent-box { background-color: @accent_bg_color; }");
-    style_context_add_provider_for_display(&now_playing.display(), &css_provider, STYLE_PROVIDER_PRIORITY_APPLICATION);
-    let progress_bar = ProgressBar::new();
+    css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
+    #accent-progress progress { background-color: @accent_fg_color; }");
+    style_context_add_provider_for_display(&now_playing_and_progress.display(), &css_provider,
+        STYLE_PROVIDER_PRIORITY_APPLICATION);
+    let progress_bar = ProgressBar::builder().name("accent-progress").build();
     progress_bar.add_css_class("osd");
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
@@ -94,7 +97,6 @@ pub fn media_controls() -> Wrapper {
     song_info.append(&position_label);
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
-    let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).build();
     now_playing_and_progress.append(&progress_bar);
     now_playing_and_progress.append(&now_playing);
     play_pause.connect_clicked(move |play_pause| {
