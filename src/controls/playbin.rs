@@ -40,12 +40,12 @@ pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
 pub trait Playbin {
     fn set_uri(&self, uri: &PathBuf);
     fn get_position(&self) -> Option<u64>;
-    fn get_duration(&self) -> Option<u64>;
-    fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64, scale: &Scale)
+    fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>, scale: &Scale)
         -> anyhow::Result<()>;
-    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64,
+    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>,
         scale: &Scale, mpris_player: &MprisPlayer) -> anyhow::Result<()>;
-    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, progress_bar: &ProgressBar, scale: &Scale);
+    fn simple_seek(&self, delta: Duration, duration: Option<u64>, forward: bool, label: &Label,
+        progress_bar: &ProgressBar, scale: &Scale);
 }
 
 impl Playbin for Pipeline {
@@ -55,28 +55,28 @@ impl Playbin for Pipeline {
     fn get_position(&self) -> Option<u64> {
         PLAYBIN.query_position().map(ClockTime::nseconds)
     }
-    fn get_duration(&self) -> Option<u64> {
-        PLAYBIN.query_duration().map(ClockTime::nseconds)
-    }
-    fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64, scale: &Scale)
+    fn seek_internal(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>, scale: &Scale)
         -> anyhow::Result<()> {
         self.seek_simple(SeekFlags::FLUSH | SeekFlags::KEY_UNIT, ClockTime::from_nseconds(value))?;
         label.set_label(&format(value));
-        progress_bar.set_fraction(value as f64 / duration as f64);
+        if let Some(duration) = duration {
+            progress_bar.set_fraction(value as f64 / duration as f64);
+        }
         Ok(scale.set_value(value as f64))
     }
-    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: u64,
+    fn seek_internal_and_mpris(&self, value: u64, label: &Label, progress_bar: &ProgressBar, duration: Option<u64>,
         scale: &Scale, mpris_player: &MprisPlayer) -> anyhow::Result<()> {
         self.seek_internal(value, label, progress_bar, duration, scale)?;
         Ok(mpris_player.set_position(value as i64))
     }
-    fn simple_seek(&self, duration: Duration, forward: bool, label: &Label, progress_bar: &ProgressBar, scale: &Scale) {
+    fn simple_seek(&self, delta: Duration, duration: Option<u64>, forward: bool, label: &Label,
+        progress_bar: &ProgressBar, scale: &Scale) {
         if let Some(position) = self.get_position() {
-            let nanos = duration.as_nanos() as i64;
-            let duration = self.get_duration().unwrap();
+            let nanos = delta.as_nanos() as i64;
             self.seek_internal(
-                ((position as i64) + if forward { nanos } else { -nanos }).clamp(0, duration as i64) as u64, label,
-                progress_bar, duration, scale
+                ((position as i64) + if forward { nanos } else { -nanos })
+                    .clamp(0, duration.unwrap_or(u64::MAX) as i64) as u64,
+                label, progress_bar, duration, scale,
             ).unwrap();
         }
     }

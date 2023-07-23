@@ -15,7 +15,7 @@ use util::format;
 use crate::body::collection::model::Collection;
 use crate::song::{get_current_song, join_path, Song, WithCover};
 use crate::song::WithPath;
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, unknown_album_path, util};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, util};
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -51,10 +51,11 @@ impl Playable for Button {
     }
 }
 
-fn update_duration(label: &Label, scale: &Scale) {
-    if let Some(duration) = PLAYBIN.query_duration().map(ClockTime::nseconds) {
-        label.set_label(&format(duration));
-        scale.set_range(0.0, duration as f64);
+fn update_duration(duration: &mut Option<u64>, label: &Label, scale: &Scale) {
+    *duration = PLAYBIN.query_duration().map(ClockTime::nseconds);
+    if let Some(duration) = duration {
+        label.set_label(&format(*duration));
+        scale.set_range(0.0, *duration as f64);
     }
 }
 
@@ -73,7 +74,6 @@ pub fn media_controls() -> Wrapper {
     progress_bar.add_css_class("osd");
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
-    let unknown_album_path = unknown_album_path(&album_image.display());
     now_playing.append(&album_image);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
@@ -110,6 +110,7 @@ pub fn media_controls() -> Wrapper {
             }
         }
     });
+    let mut duration: Option<u64> = None;
     scale.connect_change_value({
         let position_label = position_label.clone();
         let progress_bar = progress_bar.clone();
@@ -117,14 +118,9 @@ pub fn media_controls() -> Wrapper {
         let mpris_player = mpris_player.clone();
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
-                match PLAYBIN.get_duration() {
-                    None => { warn!("cannot seek when duration is not available"); }
-                    Some(duration) => {
-                        if let Err(error) = PLAYBIN.seek_internal_and_mpris(value as u64, &position_label,
-                            &progress_bar, duration, &scale, &mpris_player) {
-                            warn!("error trying to seek to {} {}", value, error);
-                        }
-                    }
+                if let Err(error) = PLAYBIN.seek_internal_and_mpris(value as u64, &position_label, &progress_bar,
+                    duration, &scale, &mpris_player) {
+                    warn!("error trying to seek to {} {}", value, error);
                 }
             }
             Inhibit(true)
@@ -162,7 +158,7 @@ pub fn media_controls() -> Wrapper {
         let progress_bar = progress_bar.clone();
         let scale = scale.clone();
         move |delta_micros| {
-            PLAYBIN.simple_seek(Duration::from_micros(delta_micros.abs() as u64), delta_micros >= 0,
+            PLAYBIN.simple_seek(Duration::from_micros(delta_micros.abs() as u64), duration, delta_micros >= 0,
                 &position_label, &progress_bar, &scale);
         }
     });
@@ -175,7 +171,7 @@ pub fn media_controls() -> Wrapper {
                     match state_changed.current() {
                         Playing => {
                             mpris_player.set_playback_status(PlaybackStatus::Playing);
-                            timeout_add_local(Duration::from_millis(200), {
+                            timeout_add_local(Duration::from_millis(500), {
                                 let position_label = position_label.clone();
                                 let scale = scale.clone();
                                 let progress_bar = progress_bar.clone();
@@ -184,7 +180,7 @@ pub fn media_controls() -> Wrapper {
                                     if let Some(position) = PLAYBIN.get_position() {
                                         position_label.set_label(&format(position));
                                         scale.set_value(position as f64);
-                                        if let Some(duration) = PLAYBIN.get_duration() {
+                                        if let Some(duration) = duration {
                                             progress_bar.set_fraction(position as f64 / duration as f64);
                                         }
                                         mpris_player.set_position(position as i64);
@@ -201,12 +197,12 @@ pub fn media_controls() -> Wrapper {
                     once.call_once(|| {
                         if let Ok((song, Config { current_song_position, .. }, _)) = get_current_song(&mut get_connection()) {
                             PLAYBIN.seek_internal_and_mpris(current_song_position as u64, &position_label,
-                                &progress_bar, song.duration as u64, &scale, &mpris_player).unwrap();
+                                &progress_bar, Some(song.duration as u64), &scale, &mpris_player).unwrap();
                         }
                     });
-                    update_duration(&duration_label, &scale);
+                    update_duration(&mut duration, &duration_label, &scale);
                 }
-                DurationChanged(_) => { update_duration(&duration_label, &scale); }
+                DurationChanged(_) => { update_duration(&mut duration, &duration_label, &scale); }
                 StreamStart(_) => {
                     let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
                     get_connection().transaction(|connection| {
@@ -222,7 +218,7 @@ pub fn media_controls() -> Wrapper {
                             album_image.set_from_file(Some(&cover));
                             cover.to_str().map(|it| { format!("file:{}", it) })
                         } else {
-                            album_image.set_from_file(unknown_album_path.clone());
+                            album_image.set_icon_name(Some("audio-x-generic"));
                             None
                         };
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);

@@ -12,7 +12,7 @@ use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder, unknown_album_path};
+use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -183,7 +183,6 @@ impl Body {
     pub fn albums(artist_string: Option<String>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper) -> Self {
         let artist_string = artist_string.map(Rc::new);
-        let unknown_album_path = unknown_album_path(&scrolled_window.display());
         Self {
             body_type: BodyType::Albums,
             query: artist_string.clone(),
@@ -204,7 +203,11 @@ impl Body {
                             let cover = join_path(&collection_path.clone().unwrap(),
                                 &album_song_path.clone().unwrap()).cover();
                             let image = Image::builder().pixel_size(38).build();
-                            image.set_from_file(cover.exists().then_some(cover).or(unknown_album_path.clone()));
+                            if cover.exists() {
+                                image.set_from_file(Some(cover));
+                            } else {
+                                image.set_icon_name(Some("audio-x-generic"));
+                            }
                             list_item.set_child(Some(&image));
                         }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),
                         (Box::new(|rc, list_item| {
