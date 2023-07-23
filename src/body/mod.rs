@@ -13,6 +13,7 @@ use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
 use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
+use crate::common::constant::UNKNOWN_ALBUM;
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -206,7 +207,7 @@ impl Body {
                             if cover.exists() {
                                 image.set_from_file(Some(cover));
                             } else {
-                                image.set_icon_name(Some("audio-x-generic"));
+                                image.set_icon_name(Some(UNKNOWN_ALBUM));
                             }
                             list_item.set_child(Some(&image));
                         }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),

@@ -16,6 +16,7 @@ use crate::body::collection::model::Collection;
 use crate::song::{get_current_song, join_path, Song, WithCover};
 use crate::song::WithPath;
 use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, util};
+use crate::common::constant::UNKNOWN_ALBUM;
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -218,7 +219,7 @@ pub fn media_controls() -> Wrapper {
                             album_image.set_from_file(Some(&cover));
                             cover.to_str().map(|it| { format!("file:{}", it) })
                         } else {
-                            album_image.set_icon_name(Some("audio-x-generic"));
+                            album_image.set_icon_name(Some(UNKNOWN_ALBUM));
                             None
                         };
                         wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
