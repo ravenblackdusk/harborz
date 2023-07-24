@@ -1,17 +1,21 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
 use adw::prelude::*;
+use adw::WindowTitle;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
 use gstreamer::ClockTime;
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, CssProvider, Image, Inhibit, Label, ProgressBar, Scale, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk::{Button, CssProvider, GestureLongPress, Image, Inhibit, Label, ProgressBar, Scale, ScrolledWindow, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Orientation::{Horizontal, Vertical};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
+use crate::body::Body;
 use crate::body::collection::model::Collection;
 use crate::song::{get_current_song, join_path, Song, WithCover};
 use crate::song::WithPath;
@@ -60,7 +64,8 @@ fn update_duration(duration: &mut Option<u64>, label: &Label, scale: &Scale) {
     }
 }
 
-pub fn media_controls() -> Wrapper {
+pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
+    history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>) -> Wrapper {
     let once = Once::new();
     let mpris_player = mpris_player();
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
@@ -75,6 +80,21 @@ pub fn media_controls() -> Wrapper {
     progress_bar.add_css_class("osd");
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
+    let song_selected_body: Rc<RefCell<Option<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(None));
+    let long_press = GestureLongPress::new();
+    long_press.connect_pressed({
+        let song_selected_body = song_selected_body.clone();
+        let window_title = window_title.clone();
+        let scrolled_window = scrolled_window.clone();
+        let history = history.clone();
+        let back_button = back_button.clone();
+        move |_, _, _| {
+            if let Some((body, _)) = song_selected_body.borrow().as_ref() {
+                body.clone().set(&window_title, &scrolled_window, history.clone(), &back_button);
+            }
+        }
+    });
+    album_image.add_controller(long_press);
     now_playing.append(&album_image);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
@@ -139,6 +159,7 @@ pub fn media_controls() -> Wrapper {
                 } else {
                     play_pause.emit_clicked();
                 }
+                *song_selected_body.borrow_mut() = history.borrow().last().cloned();
             }
             None
         }

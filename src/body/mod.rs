@@ -108,17 +108,18 @@ fn connect_accent_if_now_playing(song: &Song, current_song_id: Option<i32>, list
 }
 
 impl Body {
-    pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Body, bool)>>>) {
+    pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) {
         self.scroll_adjustment.set(scroll_adjustment);
-        history.borrow_mut().push((self, true));
+        history.borrow_mut().push((Rc::new(self), true));
     }
-    pub fn set(self, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Self, bool)>>>, back_button: &Option<Button>) {
+    pub fn set(self: Rc<Self>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>) {
         if let Some(back_button) = back_button { back_button.set_visible(true); }
         window_title.set_title(self.title.as_str());
         window_title.set_subtitle(self.subtitle.as_str());
         let mut history = history.borrow_mut();
-        if let Some((Body { scroll_adjustment, .. }, _)) = history.last() {
+        if let Some((body, _)) = history.last() {
+            let Body { scroll_adjustment, .. } = body.deref();
             scroll_adjustment.set(scrolled_window.get_adjustment());
         }
         scrolled_window.set_child(Some((*self.widget).as_ref()));
@@ -135,7 +136,7 @@ impl Body {
         }
     }
     pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper, back_button: &Option<Button>) -> Self {
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper, back_button: &Option<Button>) -> Self {
         Self {
             body_type: BodyType::Artists,
             query: None,
@@ -172,9 +173,9 @@ impl Body {
                         let back_button = back_button.clone();
                         move |rc| {
                             let (artist_string, _, _) = rc.borrow();
-                            Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(),
+                            Rc::new(Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(),
                                 &media_controls,
-                            ).set(&window_title, &scrolled_window, history.clone(), &back_button);
+                            )).set(&window_title, &scrolled_window, history.clone(), &back_button);
                         }
                     },
                 )
@@ -182,7 +183,7 @@ impl Body {
         }
     }
     pub fn albums(artist_string: Option<String>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Self, bool)>>>, media_controls: &Wrapper) -> Self {
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper) -> Self {
         let artist_string = artist_string.map(Rc::new);
         Self {
             body_type: BodyType::Albums,
@@ -230,7 +231,7 @@ impl Body {
                         let scrolled_window = scrolled_window.clone();
                         move |rc| {
                             let (album_string, _, _, _) = rc.borrow();
-                            Self::songs(album_string.clone(), artist_string.clone(), &media_controls)
+                            Rc::new(Self::songs(album_string.clone(), artist_string.clone(), &media_controls))
                                 .set(&window_title, &scrolled_window, history.clone(), &None);
                         }
                     },
@@ -239,7 +240,6 @@ impl Body {
         }
     }
     pub fn songs(album_string: Option<String>, artist_string: Option<Rc<String>>, media_controls: &Wrapper) -> Self {
-        let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
         let album_string = album_string.map(Rc::new);
         Self {
             body_type: BodyType::Songs,
@@ -250,34 +250,37 @@ impl Body {
             widget: Box::new(
                 column_view(
                     get_current_album(artist_string, album_string, &mut get_connection()).into_iter()
-                        .map(|(song, collection)| { Rc::new((media_controls.clone(), song, collection, current_song_id)) })
+                        .map(|(song, collection)| { Rc::new((media_controls.clone(), song, collection)) })
                         .collect::<Vec<_>>(),
                     vec![
-                        (Box::new(|rc: Rc<(Wrapper, Song, Collection, Option<i32>)>, list_item: &ListItem| {
-                            let (wrapper, song, _, current_song_id) = &*rc;
+                        (Box::new(|rc: Rc<(Wrapper, Song, Collection)>, list_item: &ListItem| {
+                            let (wrapper, song, _) = &*rc;
+                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
                             let label_builder = Label::builder().bold();
                             let label = if let Some(track_number) = song.track_number {
                                 label_builder.label(track_number.to_string())
                             } else {
                                 label_builder
                             }.build();
-                            connect_accent_if_now_playing(song, *current_song_id, list_item, label, wrapper);
-                        }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection, Option<i32>)>, &ListItem)>, false),
+                            connect_accent_if_now_playing(song, current_song_id, list_item, label, wrapper);
+                        }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
                         (Box::new(|rc, list_item| {
-                            let (wrapper, song, _, current_song_id) = &*rc;
+                            let (wrapper, song, _) = &*rc;
+                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
                             let label = Label::builder().label(song.title_str()).ellipsized().bold()
                                 .margin_top(4).margin_bottom(4).build();
-                            connect_accent_if_now_playing(song, *current_song_id, list_item, label, wrapper);
+                            connect_accent_if_now_playing(song, current_song_id, list_item, label, wrapper);
                         }), true),
                         (Box::new(|rc, list_item| {
-                            let (wrapper, song, _, current_song_id) = &*rc;
+                            let (wrapper, song, _) = &*rc;
+                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
                             let label = Label::builder().label(&format(song.duration as u64)).bold_subscript().build();
-                            connect_accent_if_now_playing(song, *current_song_id, list_item, label, wrapper);
+                            connect_accent_if_now_playing(song, current_song_id, list_item, label, wrapper);
                         }), false),
                     ], {
                         let media_controls = media_controls.clone();
                         move |rc| {
-                            let (_, song, collection, _) = &*rc;
+                            let (_, song, collection) = &*rc;
                             media_controls.emit_by_name::<()>(SONG_SELECTED, &[&song.path, &collection.path]);
                         }
                     },

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 use adw::{Application, ApplicationWindow, HeaderBar, WindowTitle};
 use adw::glib::signal::Inhibit;
@@ -46,7 +47,6 @@ fn main() -> Result<ExitCode> {
         let window = ApplicationWindow::builder().application(application).content(&main_box)
             .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
             .build();
-        let media_controls = media_controls();
         let window_title = WindowTitle::builder().title("Harborz").subtitle("Artists").build();
         let bar = HeaderBar::builder().title_widget(&window_title).build();
         let collection_button = Button::builder().label("Collection").build();
@@ -55,7 +55,8 @@ fn main() -> Result<ExitCode> {
         let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
             .popover(&Popover::builder().child(&menu).build()).build();
         let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
-        let history: Rc<RefCell<Vec<(Body, bool)>>> = Rc::new(RefCell::new(Vec::new()));
+        let history: Rc<RefCell<Vec<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(Vec::new()));
+        let media_controls = media_controls(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
         back_button.connect_clicked({
             let history = history.clone();
             let window_title = window_title.clone();
@@ -64,12 +65,12 @@ fn main() -> Result<ExitCode> {
                 let mut history = history.borrow_mut();
                 history.pop();
                 back_button.set_visible(history.len() > 1);
-                if let Some((Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. },
-                    adjust_scroll)) = history.last() {
+                if let Some((body, adjust_scroll)) = history.last() {
+                    let Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
                     window_title.set_title(title.as_str());
                     window_title.set_subtitle(subtitle.as_str());
                     scrolled_window.set_child(Some((**widget).as_ref()));
-                    if *adjust_scroll { scrolled_window.adjust(body_scroll_adjustment); }
+                    if *adjust_scroll { scrolled_window.adjust(&body_scroll_adjustment); }
                 }
             }
         });
@@ -82,7 +83,7 @@ fn main() -> Result<ExitCode> {
             let back_button = back_button.clone();
             move |_| {
                 if history.borrow().last().unwrap().0.body_type != BodyType::Collections {
-                    Body::collections(&window)
+                    Rc::new(Body::collections(&window))
                         .set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
                 }
                 menu_button.popdown();
@@ -94,7 +95,7 @@ fn main() -> Result<ExitCode> {
             match body_body_type {
                 BodyType::Artists => {
                     Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls,
-                        &Some(back_button.clone())
+                        &Some(back_button.clone()),
                     ).put_to_history(body_scroll_adjustment, history.clone());
                 }
                 BodyType::Albums => {
@@ -112,14 +113,15 @@ fn main() -> Result<ExitCode> {
             }
         }
         if empty_history {
-            Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls, &Some(back_button.clone()))
-                .set(&window_title, &scrolled_window, history.clone(), &None);
-        } else if let Some((Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. }, _))
-            = history.borrow().last() {
+            Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls,
+                &Some(back_button.clone()))
+            ).set(&window_title, &scrolled_window, history.clone(), &None);
+        } else if let Some((body, _)) = history.borrow().last() {
+            let Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
             window_title.set_title(title.as_str());
             window_title.set_subtitle(subtitle.as_str());
             scrolled_window.set_child(Some((**widget).as_ref()));
-            scrolled_window.adjust(body_scroll_adjustment);
+            scrolled_window.adjust(&body_scroll_adjustment);
         }
         main_box.append(&bar);
         main_box.append(&scrolled_window);
@@ -140,9 +142,10 @@ fn main() -> Result<ExitCode> {
                 if let Some((body, _)) = history.last() {
                     body.scroll_adjustment.set(scrolled_window.get_adjustment());
                 }
-                insert_into(history_bodies).values(history.iter().map(|(Body {
-                    query: body_query, body_type: body_body_type, scroll_adjustment: body_scroll_adjustment, ..
-                }, _)| {
+                insert_into(history_bodies).values(history.iter().map(|(body, _)| {
+                    let Body {
+                        query: body_query, body_type: body_body_type, scroll_adjustment: body_scroll_adjustment, ..
+                    } = body.deref();
                     (query.eq(body_query.clone().map(|it| { String::from(it.as_str()) })),
                         body_type.eq(body_body_type), scroll_adjustment.eq(body_scroll_adjustment.get()))
                 }).collect::<Vec<_>>()).execute(&mut get_connection()).unwrap();
