@@ -11,7 +11,7 @@ use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamSta
 use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
 use gtk::{Button, CssProvider, GestureLongPress, Image, Inhibit, Label, ProgressBar, Scale, ScrolledWindow, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
-use gtk::Orientation::{Horizontal, Vertical};
+use gtk::Orientation::Vertical;
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
@@ -69,8 +69,7 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
     let once = Once::new();
     let mpris_player = mpris_player();
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
-    let now_playing = gtk::Box::builder().orientation(Horizontal)
-        .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
+    let now_playing = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
     let css_provider = CssProvider::new();
     css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
     #accent-progress progress { background-color: @accent_fg_color; }");
@@ -80,7 +79,7 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
     progress_bar.add_css_class("osd");
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
-    let song_selected_body: Rc<RefCell<Option<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(None));
+    let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
     let long_press = GestureLongPress::new();
     long_press.connect_pressed({
         let song_selected_body = song_selected_body.clone();
@@ -89,7 +88,7 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
         let history = history.clone();
         let back_button = back_button.clone();
         move |_, _, _| {
-            if let Some((body, _)) = song_selected_body.borrow().as_ref() {
+            if let Some(body) = song_selected_body.borrow().as_ref() {
                 body.clone().set(&window_title, &scrolled_window, history.clone(), &back_button);
             }
         }
@@ -101,7 +100,8 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
     play_pause.play();
     let toolbar = gtk::Box::builder().build();
     toolbar.add_css_class("toolbar");
-    let skip_backward = Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").hexpand(true).build();
+    let skip_backward = Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").hexpand(true)
+        .build();
     skip_backward.connect_clicked(|_| { go_delta_song(-1, true); });
     let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").hexpand(true).build();
     skip_forward.connect_clicked(|_| { go_delta_song(1, true); });
@@ -138,7 +138,8 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
         let scale = scale.clone();
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
-                if let Err(error) = PLAYBIN.seek_internal(value as u64, &position_label, &progress_bar, duration, &scale) {
+                if let Err(error)
+                    = PLAYBIN.seek_internal(value as u64, &position_label, &progress_bar, duration, &scale) {
                     warn!("error trying to seek to {} {}", value, error);
                 }
             }
@@ -159,7 +160,7 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
                 } else {
                     play_pause.emit_clicked();
                 }
-                *song_selected_body.borrow_mut() = history.borrow().last().cloned();
+                *song_selected_body.borrow_mut() = history.borrow().last().map(|(body, _)| { body }).cloned();
             }
             None
         }
@@ -213,7 +214,8 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
                 }
                 AsyncDone(_) => {
                     once.call_once(|| {
-                        if let Ok((song, Config { current_song_position, .. }, _)) = get_current_song(&mut get_connection()) {
+                        if let Ok((song, Config { current_song_position, .. }, _))
+                            = get_current_song(&mut get_connection()) {
                             PLAYBIN.seek_internal(current_song_position as u64, &position_label, &progress_bar,
                                 Some(song.duration as u64), &scale).unwrap();
                         }
