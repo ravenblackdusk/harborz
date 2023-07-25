@@ -65,7 +65,7 @@ pub struct Body {
 }
 
 fn column_view<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>) + 'static>(row_items: Vec<Rc<T>>,
-    columns: Vec<(Box<S>, bool)>, on_row_activated: F) -> ColumnView {
+    columns: Vec<(Box<dyn Fn() -> Box<dyn AsRef<Widget>>>, Box<S>, bool)>, on_row_activated: F) -> ColumnView {
     let store = ListStore::new(BoxedAnyObject::static_type());
     for row_item in row_items.iter() {
         store.append(&BoxedAnyObject::new(row_item.clone()));
@@ -74,21 +74,21 @@ fn column_view<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<
         .show_row_separators(true).build();
     column_view.first_child().unwrap().set_visible(false);
     column_view.connect_activate(move |_, row| { on_row_activated(row_items[row as usize].clone()); });
-    for (set_child, expand) in columns {
+    for (setup_child, bind, expand) in columns {
         let item_factory = SignalListItemFactory::new();
-        item_factory.connect_bind(move |_, item| {
+        item_factory.connect_setup(move |_, item| {
             let list_item = item.downcast_ref::<ListItem>().unwrap();
             list_item.set_selectable(false);
-            set_child(list_item.item().and_downcast::<BoxedAnyObject>().unwrap().borrow::<Rc<T>>().deref().clone(),
+            list_item.set_child(Some((*(*setup_child)()).as_ref()));
+        });
+        item_factory.connect_bind(move |_, item| {
+            let list_item = item.downcast_ref::<ListItem>().unwrap();
+            bind(list_item.item().and_downcast::<BoxedAnyObject>().unwrap().borrow::<Rc<T>>().deref().clone(),
                 list_item);
         });
         column_view.append_column(&ColumnViewColumn::builder().factory(&item_factory).expand(expand).build());
     }
     column_view
-}
-
-fn or_none_label(label: &Option<String>) -> Label {
-    Label::builder().label(or_none(label)).margin_ellipsized(4).bold().build()
 }
 
 fn next_icon() -> Image {
@@ -103,13 +103,11 @@ fn accent_if_now_playing(label: &Label, row_id: i32, current_song_id: i32) {
     }
 }
 
-fn connect_accent_if_now_playing(song: &Song, current_song_id: Option<i32>, list_item: &ListItem, label: Label,
-    wrapper: &Wrapper) {
+fn connect_accent_if_now_playing(song: &Song, current_song_id: Option<i32>, label: Label, wrapper: &Wrapper) {
     let id = song.id;
     if let Some(current_song_id) = current_song_id {
         accent_if_now_playing(&label, id, current_song_id);
     }
-    list_item.set_child(Some(&label));
     wrapper.connect_local(STREAM_STARTED, true, move |params| {
         accent_if_now_playing(&label, id, params[1].get::<i32>().unwrap());
         None
@@ -142,8 +140,8 @@ impl Body {
     pub fn set(self: Rc<Self>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>) {
         if let Some(back_button) = back_button { back_button.set_visible(true); }
-        window_title.set_title(self.title.as_str());
-        window_title.set_subtitle(self.subtitle.as_str());
+        window_title.set_title(&self.title);
+        window_title.set_subtitle(&self.subtitle);
         let mut history = history.borrow_mut();
         if let Some((body, _)) = history.last() {
             let Body { scroll_adjustment, .. } = body.deref();
@@ -177,8 +175,7 @@ impl Body {
                     songs.group_by(artist).select((artist, count_distinct(album), count_star()))
                         .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap().into_iter()
                         .map(Rc::new).collect::<Vec<_>>(),
-                    vec![(Box::new(|rc: Rc<(Option<String>, i64, i64)>, list_item: &ListItem| {
-                        let (album_string, album_count, song_count) = rc.borrow();
+                    vec![(Box::new(|| {
                         let artist_row = gtk::Box::builder().margin_top(4).margin_bottom(4).build();
                         let artist_box = gtk::Box::builder().orientation(Vertical).build();
                         let count_box = gtk::Box::builder().spacing(4).build();
@@ -186,15 +183,25 @@ impl Body {
                         let song_count_box = gtk::Box::builder().spacing(4).build();
                         count_box.append(&album_count_box);
                         count_box.append(&song_count_box);
-                        album_count_box.append(&Label::builder().label(album_count.to_string()).margin_start(4).subscript().build());
+                        album_count_box.append(&Label::builder().margin_start(4).subscript().build());
                         album_count_box.append(&Label::builder().label("Albums").subscript().build());
-                        song_count_box.append(&Label::builder().label(song_count.to_string()).subscript().build());
+                        song_count_box.append(&Label::builder().subscript().build());
                         song_count_box.append(&Label::builder().label("Songs").subscript().build());
-                        artist_box.append(&or_none_label(album_string));
+                        artist_box.append(&Label::builder().margin_ellipsized(4).bold().build());
                         artist_box.append(&count_box);
                         artist_row.append(&artist_box);
                         artist_row.append(&next_icon());
-                        list_item.set_child(Some(&artist_row));
+                        Box::new(artist_row)
+                    }), Box::new(|rc: Rc<(Option<String>, i64, i64)>, list_item: &ListItem| {
+                        let (album_string, album_count, song_count) = rc.borrow();
+                        let artist_box = list_item.child().and_downcast::<gtk::Box>().unwrap().first_child()
+                            .and_downcast::<gtk::Box>().unwrap();
+                        artist_box.first_child().and_downcast::<Label>().unwrap().set_label(or_none(album_string));
+                        let count_box = artist_box.last_child().and_downcast::<gtk::Box>().unwrap();
+                        count_box.first_child().and_downcast::<gtk::Box>().unwrap().first_child()
+                            .and_downcast::<Label>().unwrap().set_label(&album_count.to_string());
+                        count_box.last_child().and_downcast::<gtk::Box>().unwrap().first_child()
+                            .and_downcast::<Label>().unwrap().set_label(&song_count.to_string());
                     }), true)], {
                         let window_title = window_title.clone();
                         let scrolled_window = scrolled_window.clone();
@@ -229,31 +236,38 @@ impl Body {
                         .get_results::<(Option<String>, i64, Option<String>, Option<String>)>(&mut get_connection())
                         .unwrap().into_iter().map(Rc::new).collect::<Vec<_>>(),
                     vec![
-                        (Box::new(move |rc: Rc<(Option<String>, i64, Option<String>, Option<String>)>,
-                            list_item: &ListItem| {
-                            let (_, _, collection_path, album_song_path) = rc.borrow();
-                            let cover = join_path(&collection_path.clone().unwrap(),
-                                &album_song_path.clone().unwrap()).cover();
-                            let image = Image::builder().pixel_size(38).build();
-                            if cover.exists() {
-                                image.set_from_file(Some(cover));
-                            } else {
-                                image.set_icon_name(Some(UNKNOWN_ALBUM));
-                            }
-                            list_item.set_child(Some(&image));
-                        }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>, false),
-                        (Box::new(|rc, list_item| {
-                            let (album_string, count, _, _) = rc.borrow();
+                        (Box::new(|| { Box::new(Image::builder().pixel_size(38).build()) }),
+                            Box::new(move |rc: Rc<(Option<String>, i64, Option<String>, Option<String>)>,
+                                list_item: &ListItem| {
+                                let (_, _, collection_path, album_song_path) = rc.borrow();
+                                let cover = join_path(&collection_path.clone().unwrap(),
+                                    &album_song_path.clone().unwrap()).cover();
+                                let image = list_item.child().and_downcast::<Image>().unwrap();
+                                if cover.exists() {
+                                    image.set_from_file(Some(cover));
+                                } else {
+                                    image.set_icon_name(Some(UNKNOWN_ALBUM));
+                                }
+                            }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>,
+                            false
+                        ), (Box::new(|| {
                             let album_row = gtk::Box::builder().margin_top(4).margin_bottom(4).build();
                             let album_box = gtk::Box::builder().orientation(Vertical).build();
                             let count_box = gtk::Box::builder().spacing(4).build();
-                            album_box.append(&or_none_label(album_string));
-                            count_box.append(&Label::builder().label(count.to_string()).margin_start(4).subscript().build());
+                            count_box.append(&Label::builder().margin_start(4).subscript().build());
                             count_box.append(&Label::builder().label("Songs").subscript().build());
+                            album_box.append(&Label::builder().margin_ellipsized(4).bold().build());
                             album_box.append(&count_box);
                             album_row.append(&album_box);
                             album_row.append(&next_icon());
-                            list_item.set_child(Some(&album_row));
+                            Box::new(album_row)
+                        }), Box::new(|rc, list_item| {
+                            let (album_string, count, _, _) = rc.borrow();
+                            let album_box = list_item.child().and_downcast::<gtk::Box>().unwrap().first_child()
+                                .and_downcast::<gtk::Box>().unwrap();
+                            album_box.first_child().and_downcast::<Label>().unwrap().set_label(or_none(album_string));
+                            album_box.last_child().and_downcast::<gtk::Box>().unwrap().first_child()
+                                .and_downcast::<Label>().unwrap().set_label(&count.to_string());
                         }), true),
                     ], {
                         let media_controls = media_controls.clone();
@@ -284,30 +298,36 @@ impl Body {
                         .map(|(song, collection)| { Rc::new((media_controls.clone(), song, collection)) })
                         .collect::<Vec<_>>(),
                     vec![
-                        (Box::new(|rc: Rc<(Wrapper, Song, Collection)>, list_item: &ListItem| {
+                        (Box::new(|| { Box::new(Label::builder().bold().build()) }),
+                            Box::new(|rc: Rc<(Wrapper, Song, Collection)>, list_item: &ListItem| {
+                                let (wrapper, song, _) = &*rc;
+                                let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection())
+                                    .unwrap();
+                                let label = list_item.child().and_downcast::<Label>().unwrap();
+                                if let Some(track_number) = song.track_number {
+                                    label.set_label(&track_number.to_string());
+                                }
+                                connect_accent_if_now_playing(song, current_song_id, label, wrapper);
+                            }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
+                        (Box::new(|| {
+                            Box::new(Label::builder().ellipsized().bold().margin_top(4).margin_bottom(4).build())
+                        }), Box::new(|rc, list_item| {
                             let (wrapper, song, _) = &*rc;
-                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
-                            let label_builder = Label::builder().bold();
-                            let label = if let Some(track_number) = song.track_number {
-                                label_builder.label(track_number.to_string())
-                            } else {
-                                label_builder
-                            }.build();
-                            connect_accent_if_now_playing(song, current_song_id, list_item, label, wrapper);
-                        }) as Box<dyn Fn(Rc<(Wrapper, Song, Collection)>, &ListItem)>, false),
-                        (Box::new(|rc, list_item| {
-                            let (wrapper, song, _) = &*rc;
-                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
-                            let label = Label::builder().label(song.title_str()).ellipsized().bold()
-                                .margin_top(4).margin_bottom(4).build();
-                            connect_accent_if_now_playing(song, current_song_id, list_item, label, wrapper);
+                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection())
+                                .unwrap();
+                            let label = list_item.child().and_downcast::<Label>().unwrap();
+                            label.set_label(song.title_str());
+                            connect_accent_if_now_playing(song, current_song_id, label, wrapper);
                         }), true),
-                        (Box::new(|rc, list_item| {
-                            let (wrapper, song, _) = &*rc;
-                            let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
-                            let label = Label::builder().label(&format(song.duration as u64)).bold_subscript().build();
-                            connect_accent_if_now_playing(song, current_song_id, list_item, label, wrapper);
-                        }), false),
+                        (Box::new(|| { Box::new(Label::builder().bold_subscript().build()) }),
+                            Box::new(|rc, list_item| {
+                                let (wrapper, song, _) = &*rc;
+                                let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection())
+                                    .unwrap();
+                                let label = list_item.child().and_downcast::<Label>().unwrap();
+                                label.set_label(&format(song.duration as u64));
+                                connect_accent_if_now_playing(song, current_song_id, label, wrapper);
+                            }), false),
                     ], {
                         let media_controls = media_controls.clone();
                         move |rc| {
