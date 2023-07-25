@@ -64,8 +64,9 @@ fn update_duration(duration: &mut Option<u64>, label: &Label, scale: &Scale) {
     }
 }
 
-pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-    history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>) -> Wrapper {
+pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &WindowTitle,
+    scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>)
+    -> Wrapper {
     let once = Once::new();
     let mpris_player = mpris_player();
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
@@ -79,7 +80,6 @@ pub fn media_controls(window_title: &WindowTitle, scrolled_window: &ScrolledWind
     progress_bar.add_css_class("osd");
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
-    let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
     let long_press = GestureLongPress::new();
     long_press.connect_pressed({
         let song_selected_body = song_selected_body.clone();

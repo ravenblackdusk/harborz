@@ -29,13 +29,15 @@ use crate::song::Song;
 pub mod collection;
 
 #[derive(diesel::Queryable, diesel::Selectable, Debug)]
-#[diesel(table_name = crate::schema::history_bodies)]
+#[diesel(table_name = crate::schema::bodies)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-pub struct HistoryBody {
+pub struct BodyTable {
     pub id: i32,
-    pub query: Option<String>,
+    pub query1: Option<String>,
+    pub query2: Option<String>,
     pub body_type: BodyType,
     pub scroll_adjustment: Option<f32>,
+    pub navigation_type: NavigationType,
 }
 
 #[derive(Debug, PartialEq, diesel_derive_enum::DbEnum)]
@@ -46,11 +48,18 @@ pub enum BodyType {
     Collections,
 }
 
+#[derive(Debug, diesel_derive_enum::DbEnum)]
+pub enum NavigationType {
+    History,
+    SongSelected,
+}
+
 pub struct Body {
     pub title: Rc<String>,
     pub subtitle: Rc<String>,
     pub body_type: BodyType,
-    pub query: Option<Rc<String>>,
+    pub query1: Option<Rc<String>>,
+    pub query2: Option<Rc<String>>,
     pub scroll_adjustment: Cell<Option<f32>>,
     pub widget: Box<dyn AsRef<Widget>>,
 }
@@ -108,6 +117,24 @@ fn connect_accent_if_now_playing(song: &Song, current_song_id: Option<i32>, list
 }
 
 impl Body {
+    pub fn from_body_table(body_table: &BodyTable, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper, back_button: &Button,
+        window: &ApplicationWindow) -> Self {
+        match body_table.body_type {
+            BodyType::Artists => {
+                Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls,
+                    &Some(back_button.clone()))
+            }
+            BodyType::Albums => {
+                Body::albums(body_table.query1.clone(), &window_title, &scrolled_window, history.clone(),
+                    &media_controls)
+            }
+            BodyType::Songs => {
+                Body::songs(body_table.query1.clone(), body_table.query2.clone().map(Rc::new), &media_controls)
+            }
+            BodyType::Collections => { Body::collections(&window) }
+        }
+    }
     pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) {
         self.scroll_adjustment.set(scroll_adjustment);
         history.borrow_mut().push((Rc::new(self), true));
@@ -130,7 +157,8 @@ impl Body {
             title: Rc::new(String::from("Harborz")),
             subtitle: Rc::new(String::from("Collection")),
             body_type: BodyType::Collections,
-            query: None,
+            query1: None,
+            query2: None,
             scroll_adjustment: Cell::new(None),
             widget: Box::new(add_collection_box(&window)),
         }
@@ -139,7 +167,8 @@ impl Body {
         history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper, back_button: &Option<Button>) -> Self {
         Self {
             body_type: BodyType::Artists,
-            query: None,
+            query1: None,
+            query2: None,
             title: Rc::new(String::from("Harborz")),
             subtitle: Rc::new(String::from("Artists")),
             scroll_adjustment: Cell::new(None),
@@ -187,7 +216,8 @@ impl Body {
         let artist_string = artist_string.map(Rc::new);
         Self {
             body_type: BodyType::Albums,
-            query: artist_string.clone(),
+            query1: artist_string.clone(),
+            query2: None,
             title: or_none_static(artist_string.clone()),
             subtitle: Rc::new(String::from("Albums")),
             scroll_adjustment: Cell::new(None),
@@ -243,7 +273,8 @@ impl Body {
         let album_string = album_string.map(Rc::new);
         Self {
             body_type: BodyType::Songs,
-            query: album_string.clone(),
+            query1: album_string.clone(),
+            query2: artist_string.clone(),
             title: or_none_static(album_string.clone()),
             subtitle: Rc::new(String::from("Songs")),
             scroll_adjustment: Cell::new(None),

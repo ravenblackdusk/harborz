@@ -1,6 +1,17 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    bodies (id) {
+        id -> Integer,
+        query1 -> Nullable<Text>,
+        query2 -> Nullable<Text>,
+        body_type -> crate::body::BodyTypeMapping,
+        scroll_adjustment -> Nullable<Float>,
+        navigation_type -> crate::body::NavigationTypeMapping,
+    }
+}
+
+diesel::table! {
     collections (id) {
         id -> Integer,
         path -> Text,
@@ -16,15 +27,6 @@ diesel::table! {
         window_height -> Integer,
         maximized -> Integer,
         current_song_position -> BigInt,
-    }
-}
-
-diesel::table! {
-    history_bodies (id) {
-        id -> Integer,
-        query -> Nullable<Text>,
-        body_type -> crate::body::BodyTypeMapping,
-        scroll_adjustment -> Nullable<Float>,
     }
 }
 
@@ -48,8 +50,8 @@ diesel::joinable!(config -> songs (current_song_id));
 diesel::joinable!(songs -> collections (collection_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    bodies,
     collections,
     config,
-    history_bodies,
     songs,
 );
