@@ -108,6 +108,7 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
     play_pause.play();
+    play_pause.add_css_class("flat");
     now_playing_and_play_pause.append(&play_pause);
     let song_label = Label::builder().margin_ellipsized(4).bold().build();
     let artist_label = Label::builder().margin_ellipsized(4).build();

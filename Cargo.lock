@@ -4,9 +4,9 @@ version = 3
 
 [[package]]
 name = "anyhow"
-version = "1.0.71"
+version = "1.0.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
+checksum = "3b13c32d80ecc7ab747b80c3784bce54ee8a7a0cc4fbda9bf4cda2cf6fe90854"
 
 [[package]]
 name = "atomic_refcell"
@@ -480,9 +480,9 @@ dependencies = [
 
 [[package]]
 name = "gstreamer"
-version = "0.20.6"
+version = "0.20.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3113531138b4e41968e33fd003a0d1a635ef6e0cbc309dd5004123000863ac54"
+checksum = "c0a4150420d4aa1caf6fa15f0dba7a5007d4116380633bd1253acce206098fc9"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -563,9 +563,9 @@ dependencies = [
 
 [[package]]
 name = "gstreamer-pbutils"
-version = "0.20.6"
+version = "0.20.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecd7b64a5ecb055718a2176e5292d36488f5362f4c7056991e567213dc56a81e"
+checksum = "b63dd523f9dd60329ccfabdd76813b4dfe5a3bbf9fc108d3aa015f012e87778c"
 dependencies = [
  "bitflags",
  "glib 0.17.10",
