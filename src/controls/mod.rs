@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
@@ -8,9 +8,9 @@ use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressio
 use gstreamer::ClockTime;
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
-use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt};
+use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt, GstObjectExt};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, CssProvider, GestureLongPress, Image, Inhibit, Label, ProgressBar, Scale, ScrolledWindow, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk::{Button, CssProvider, GestureLongPress, GestureSwipe, Image, Inhibit, Label, ProgressBar, Scale, ScrolledWindow, ScrollType, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Orientation::Vertical;
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
@@ -70,7 +70,8 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
     let once = Once::new();
     let mpris_player = mpris_player();
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
-    let now_playing = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
+    let now_playing_and_play_pause = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8)
+        .build();
     let css_provider = CssProvider::new();
     css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
     #accent-progress progress { background-color: @accent_fg_color; }");
@@ -80,8 +81,8 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
     progress_bar.add_css_class("osd");
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     let album_image = Image::builder().pixel_size(56).build();
-    let long_press = GestureLongPress::new();
-    long_press.connect_pressed({
+    let song_selected_body_gesture = GestureLongPress::new();
+    song_selected_body_gesture.connect_pressed({
         let song_selected_body = song_selected_body.clone();
         let window_title = window_title.clone();
         let scrolled_window = scrolled_window.clone();
@@ -93,22 +94,21 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
             }
         }
     });
-    album_image.add_controller(long_press);
+    album_image.add_controller(song_selected_body_gesture);
+    let now_playing = gtk::Box::builder().build();
+    let skip_song_gesture = GestureSwipe::new();
+    skip_song_gesture.connect_swipe(|_, velocity_x, velocity_y| {
+        if velocity_x.abs() > velocity_y.abs() {
+            go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
+        }
+    });
+    now_playing.add_controller(skip_song_gesture);
+    now_playing_and_play_pause.append(&now_playing);
     now_playing.append(&album_image);
     now_playing.append(&song_info);
     let play_pause = Button::builder().width_request(40).build();
     play_pause.play();
-    let toolbar = gtk::Box::builder().build();
-    toolbar.add_css_class("toolbar");
-    let skip_backward = Button::builder().icon_name("media-skip-backward").tooltip_text("Previous").hexpand(true)
-        .build();
-    skip_backward.connect_clicked(|_| { go_delta_song(-1, true); });
-    let skip_forward = Button::builder().icon_name("media-skip-forward").tooltip_text("Next").hexpand(true).build();
-    skip_forward.connect_clicked(|_| { go_delta_song(1, true); });
-    toolbar.append(&skip_backward);
-    toolbar.append(&play_pause);
-    toolbar.append(&skip_forward);
-    now_playing.append(&toolbar);
+    now_playing_and_play_pause.append(&play_pause);
     let song_label = Label::builder().margin_ellipsized(4).bold().build();
     let artist_label = Label::builder().margin_ellipsized(4).build();
     song_info.append(&song_label);
@@ -119,7 +119,7 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
     let scale = Scale::builder().hexpand(true).build();
     scale.set_range(0.0, 1.0);
     now_playing_and_progress.append(&progress_bar);
-    now_playing_and_progress.append(&now_playing);
+    now_playing_and_progress.append(&now_playing_and_play_pause);
     play_pause.connect_clicked(move |play_pause| {
         if PLAYBIN.current_state() == Playing {
             PLAYBIN.set_state(Paused).unwrap();
@@ -183,82 +183,91 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
                 &position_label, &progress_bar, &scale);
         }
     });
+    let tracking_position = Rc::new(Cell::new(false));
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
         let wrapper = wrapper.clone();
         move |_, message| {
-            match message.view() {
-                StateChanged(state_changed) => {
-                    match state_changed.current() {
-                        Playing => {
-                            mpris_player.set_playback_status(PlaybackStatus::Playing);
-                            timeout_add_local(Duration::from_millis(500), {
-                                let position_label = position_label.clone();
-                                let scale = scale.clone();
-                                let progress_bar = progress_bar.clone();
-                                move || {
-                                    if let Some(position) = PLAYBIN.get_position() {
-                                        position_label.set_label(&format(position));
-                                        scale.set_value(position as f64);
-                                        if let Some(duration) = duration {
-                                            progress_bar.set_fraction(position as f64 / duration as f64);
+            if message.src().map(|it| { it.name().starts_with("playbin3") }).unwrap_or(false) {
+                match message.view() {
+                    StateChanged(state_changed) => {
+                        match state_changed.current() {
+                            Playing => {
+                                mpris_player.set_playback_status(PlaybackStatus::Playing);
+                                if !tracking_position.get() {
+                                    timeout_add_local(Duration::from_millis(500), {
+                                        let position_label = position_label.clone();
+                                        let scale = scale.clone();
+                                        let progress_bar = progress_bar.clone();
+                                        let tracking_position = tracking_position.clone();
+                                        move || {
+                                            if let Some(position) = PLAYBIN.get_position() {
+                                                position_label.set_label(&format(position));
+                                                scale.set_value(position as f64);
+                                                if let Some(duration) = duration {
+                                                    progress_bar.set_fraction(position as f64 / duration as f64);
+                                                }
+                                            }
+                                            tracking_position.set(PLAYBIN.current_state() == Playing
+                                                || PLAYBIN.pending_state() == Playing);
+                                            Continue(tracking_position.get())
                                         }
-                                    }
-                                    Continue(PLAYBIN.current_state() == Playing || PLAYBIN.pending_state() == Playing)
+                                    });
+                                    tracking_position.set(true);
                                 }
-                            });
+                            }
+                            Paused => { mpris_player.set_playback_status(PlaybackStatus::Paused); }
+                            _ => {}
                         }
-                        Paused => { mpris_player.set_playback_status(PlaybackStatus::Paused); }
-                        _ => {}
                     }
-                }
-                AsyncDone(_) => {
-                    once.call_once(|| {
-                        if let Ok((song, Config { current_song_position, .. }, _))
-                            = get_current_song(&mut get_connection()) {
-                            PLAYBIN.seek_internal(current_song_position as u64, &position_label, &progress_bar,
-                                Some(song.duration as u64), &scale).unwrap();
-                        }
-                    });
-                    update_duration(&mut duration, &duration_label, &scale);
-                }
-                DurationChanged(_) => { update_duration(&mut duration, &duration_label, &scale); }
-                StreamStart(_) => {
-                    let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
-                    get_connection().transaction(|connection| {
-                        let (collection, song) = collections.inner_join(songs)
-                            .filter(path.concat("/").concat(song_path).eq(uri))
-                            .get_result::<(Collection, Song)>(connection)?;
-                        update(config).set(current_song_id.eq(song.id)).execute(connection)?;
-                        artist_label.set_label(or_none(&song.artist));
-                        let title = song.title_str().to_owned();
-                        song_label.set_label(&title);
-                        let cover = (&song, &collection).path().cover();
-                        let art_url = if cover.exists() {
-                            album_image.set_from_file(Some(&cover));
-                            cover.to_str().map(|it| { format!("file:{}", it) })
-                        } else {
-                            album_image.set_icon_name(Some(UNKNOWN_ALBUM));
-                            None
-                        };
-                        wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
-                        mpris_player.set_metadata(Metadata {
-                            length: Some(song.duration),
-                            art_url,
-                            album: song.album,
-                            album_artist: song.album_artist.map(|it| { vec![it] }),
-                            artist: song.artist.map(|it| { vec![it] }),
-                            composer: None,
-                            disc_number: None,
-                            genre: song.genre.map(|it| { vec![it] }),
-                            title: Some(title),
-                            track_number: song.track_number,
-                            url: Some(uri.to_string()),
+                    AsyncDone(_) => {
+                        once.call_once(|| {
+                            if let Ok((song, Config { current_song_position, .. }, _))
+                                = get_current_song(&mut get_connection()) {
+                                PLAYBIN.seek_internal(current_song_position as u64, &position_label, &progress_bar,
+                                    Some(song.duration as u64), &scale).unwrap();
+                            }
                         });
-                        anyhow::Ok(())
-                    }).unwrap();
+                        update_duration(&mut duration, &duration_label, &scale);
+                    }
+                    DurationChanged(_) => { update_duration(&mut duration, &duration_label, &scale); }
+                    StreamStart(_) => {
+                        let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
+                        get_connection().transaction(|connection| {
+                            let (collection, song) = collections.inner_join(songs)
+                                .filter(path.concat("/").concat(song_path).eq(uri))
+                                .get_result::<(Collection, Song)>(connection)?;
+                            update(config).set(current_song_id.eq(song.id)).execute(connection)?;
+                            artist_label.set_label(or_none(&song.artist));
+                            let title = song.title_str().to_owned();
+                            song_label.set_label(&title);
+                            let cover = (&song, &collection).path().cover();
+                            let art_url = if cover.exists() {
+                                album_image.set_from_file(Some(&cover));
+                                cover.to_str().map(|it| { format!("file:{}", it) })
+                            } else {
+                                album_image.set_icon_name(Some(UNKNOWN_ALBUM));
+                                None
+                            };
+                            wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
+                            mpris_player.set_metadata(Metadata {
+                                length: Some(song.duration),
+                                art_url,
+                                album: song.album,
+                                album_artist: song.album_artist.map(|it| { vec![it] }),
+                                artist: song.artist.map(|it| { vec![it] }),
+                                composer: None,
+                                disc_number: None,
+                                genre: song.genre.map(|it| { vec![it] }),
+                                title: Some(title),
+                                track_number: song.track_number,
+                                url: Some(uri.to_string()),
+                            });
+                            anyhow::Ok(())
+                        }).unwrap();
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
             Continue(true)
         }
