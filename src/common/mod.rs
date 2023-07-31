@@ -1,8 +1,9 @@
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::time::Duration;
 use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
 use adw::glib::timeout_add_local_once;
-use gtk::{Box, Orientation, ScrolledWindow};
+use gtk::{Box, Image, Orientation, ScrolledWindow};
 use gtk::builders::{BoxBuilder, LabelBuilder};
 use gtk::prelude::AdjustmentExt;
 
@@ -85,5 +86,15 @@ impl AdjustableScrolledWindow for ScrolledWindow {
                 move || { this.clone().vadjustment().set_value(value as f64); }
             });
         }
+    }
+}
+
+pub trait ImagePathBuf {
+    fn set_cover(&self, cover: &PathBuf);
+}
+
+impl ImagePathBuf for Image {
+    fn set_cover(&self, cover: &PathBuf) {
+        if cover.exists() { self.set_from_file(Some(&cover)); } else { self.set_icon_name(Some("audio-x-generic")); }
     }
 }

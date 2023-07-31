@@ -12,8 +12,7 @@ use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, SubscriptLabelBuilder};
-use crate::common::constant::UNKNOWN_ALBUM;
+use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf, SubscriptLabelBuilder};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -132,19 +131,18 @@ impl Castable for Option<Widget> {
 
 impl Body {
     pub fn from_body_table(body_table: &BodyTable, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper, back_button: &Button,
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper, back_button: &Button,
         window: &ApplicationWindow) -> Self {
         match body_table.body_type {
             BodyType::Artists => {
-                Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls,
+                Body::artists(&window_title, &scrolled_window, history.clone(), &now_playing,
                     &Some(back_button.clone()))
             }
             BodyType::Albums => {
-                Body::albums(body_table.query1.clone(), &window_title, &scrolled_window, history.clone(),
-                    &media_controls)
+                Body::albums(body_table.query1.clone(), &window_title, &scrolled_window, history.clone(), &now_playing)
             }
             BodyType::Songs => {
-                Body::songs(body_table.query1.clone(), body_table.query2.clone().map(Rc::new), &media_controls)
+                Body::songs(body_table.query1.clone(), body_table.query2.clone().map(Rc::new), &now_playing)
             }
             BodyType::Collections => { Body::collections(&window) }
         }
@@ -178,7 +176,7 @@ impl Body {
         }
     }
     pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper, back_button: &Option<Button>) -> Self {
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper, back_button: &Option<Button>) -> Self {
         Self {
             body_type: BodyType::Artists,
             query1: None,
@@ -218,12 +216,12 @@ impl Body {
                     }), true)], {
                         let window_title = window_title.clone();
                         let scrolled_window = scrolled_window.clone();
-                        let media_controls = media_controls.clone();
+                        let now_playing = now_playing.clone();
                         let back_button = back_button.clone();
                         move |rc| {
                             let (artist_string, _, _) = rc.borrow();
-                            Rc::new(Self::albums(artist_string.clone(), &window_title, &scrolled_window, history.clone(),
-                                &media_controls,
+                            Rc::new(Self::albums(artist_string.clone(), &window_title, &scrolled_window,
+                                history.clone(), &now_playing,
                             )).set(&window_title, &scrolled_window, history.clone(), &back_button);
                         }
                     },
@@ -232,7 +230,7 @@ impl Body {
         }
     }
     pub fn albums(artist_string: Option<String>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper) -> Self {
+        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper) -> Self {
         let artist_string = artist_string.map(Rc::new);
         Self {
             body_type: BodyType::Albums,
@@ -255,12 +253,7 @@ impl Body {
                                 let (_, _, collection_path, album_song_path) = rc.borrow();
                                 let cover = join_path(&collection_path.clone().unwrap(),
                                     &album_song_path.clone().unwrap()).cover();
-                                let image = list_item.child().and_downcast::<Image>().unwrap();
-                                if cover.exists() {
-                                    image.set_from_file(Some(cover));
-                                } else {
-                                    image.set_icon_name(Some(UNKNOWN_ALBUM));
-                                }
+                                list_item.child().and_downcast::<Image>().unwrap().set_cover(&cover);
                             }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>,
                             false
                         ), (Box::new(|| {
@@ -281,12 +274,12 @@ impl Body {
                             album_box.last_child().first_child().set_label(&count.to_string());
                         }), true),
                     ], {
-                        let media_controls = media_controls.clone();
+                        let now_playing = now_playing.clone();
                         let window_title = window_title.clone();
                         let scrolled_window = scrolled_window.clone();
                         move |rc| {
                             let (album_string, _, _, _) = rc.borrow();
-                            Rc::new(Self::songs(album_string.clone(), artist_string.clone(), &media_controls))
+                            Rc::new(Self::songs(album_string.clone(), artist_string.clone(), &now_playing))
                                 .set(&window_title, &scrolled_window, history.clone(), &None);
                         }
                     },
@@ -294,7 +287,7 @@ impl Body {
             ),
         }
     }
-    pub fn songs(album_string: Option<String>, artist_string: Option<Rc<String>>, media_controls: &Wrapper) -> Self {
+    pub fn songs(album_string: Option<String>, artist_string: Option<Rc<String>>, now_playing: &Wrapper) -> Self {
         let album_string = album_string.map(Rc::new);
         Self {
             body_type: BodyType::Songs,
@@ -306,7 +299,7 @@ impl Body {
             widget: Box::new(
                 column_view(
                     get_current_album(artist_string, album_string, &mut get_connection()).into_iter()
-                        .map(|(song, collection)| { Rc::new((media_controls.clone(), song, collection)) })
+                        .map(|(song, collection)| { Rc::new((now_playing.clone(), song, collection)) })
                         .collect::<Vec<_>>(),
                     vec![
                         (Box::new(|| { Box::new(Label::builder().bold().build()) }),
@@ -338,10 +331,10 @@ impl Body {
                                 connect_accent_if_now_playing(song, current_song_id, label, wrapper);
                             }), false),
                     ], {
-                        let media_controls = media_controls.clone();
+                        let now_playing = now_playing.clone();
                         move |rc| {
                             let (_, song, collection) = &*rc;
-                            media_controls.emit_by_name::<()>(SONG_SELECTED, &[&song.path, &collection.path]);
+                            now_playing.emit_by_name::<()>(SONG_SELECTED, &[&song.path, &collection.path]);
                         }
                     },
                 )

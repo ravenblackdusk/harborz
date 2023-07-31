@@ -16,10 +16,9 @@ use NavigationType::History;
 use crate::body::{Body, BodyType, BodyTable, NavigationType};
 use crate::body::NavigationType::SongSelected;
 use crate::common::{AdjustableScrolledWindow, gtk_box};
-use crate::common::constant::APP_ID;
+use crate::common::constant::{APP_ID, BACK_ICON};
 use crate::config::Config;
-use crate::controls::media_controls;
-use crate::controls::playbin::{PLAYBIN, Playbin};
+use crate::now_playing::playbin::{PLAYBIN, Playbin};
 use crate::db::get_connection;
 use crate::schema::config::{current_song_position, maximized, window_height, window_width};
 use crate::schema::config::dsl::config as config_table;
@@ -28,7 +27,7 @@ use crate::schema::bodies::dsl::bodies;
 
 mod schema;
 mod db;
-mod controls;
+mod now_playing;
 mod common;
 mod config;
 mod body;
@@ -40,55 +39,40 @@ fn main() -> Result<ExitCode> {
     get_connection().run_pending_migrations(MIGRATIONS)?;
     let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(|application| {
-        let main_box = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
+        let header_body = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
         let history_bodies = bodies.filter(navigation_type.eq(History)).get_results::<BodyTable>(&mut get_connection())
             .unwrap();
         let empty_history = history_bodies.is_empty();
         let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
-        let window = ApplicationWindow::builder().application(application).content(&main_box)
+        let window = ApplicationWindow::builder().application(application).content(&header_body)
             .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
             .build();
-        let window_title = WindowTitle::builder().title("Harborz").subtitle("Artists").build();
+        let window_title = WindowTitle::builder().build();
         let history: Rc<RefCell<Vec<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(Vec::new()));
         let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
-        let bar = HeaderBar::builder().title_widget(&window_title).build();
-        main_box.append(&bar);
+        let header_bar = HeaderBar::builder().title_widget(&window_title).build();
+        header_body.append(&header_bar);
+        let body = gtk::Box::builder().orientation(Vertical).build();
+        header_body.append(&body);
         let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
-        main_box.append(&scrolled_window);
-        let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home")
-            .visible(history_bodies.len() > 1).build();
-        bar.pack_start(&back_button);
-        let media_controls = media_controls(song_selected_body.clone(), &window_title, &scrolled_window,
-            history.clone(), &Some(back_button.clone()));
-        main_box.append(&media_controls);
+        body.append(&scrolled_window);
+        let back_button = Button::builder().icon_name(BACK_ICON).tooltip_text("Home").visible(history_bodies.len() > 1)
+            .build();
+        header_bar.pack_start(&back_button);
+        let now_playing = now_playing::create(song_selected_body.clone(), &window_title, &scrolled_window,
+            history.clone(), &back_button, &header_body, &body);
+        body.append(&now_playing);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
             .get_result::<BodyTable>(&mut get_connection()).ok().map(|body_table| {
             let body = Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(),
-                &media_controls, &back_button, &window);
+                &now_playing, &back_button, &window);
             body.scroll_adjustment.set(body_table.scroll_adjustment);
             Rc::new(body)
-        });
-        back_button.connect_clicked({
-            let history = history.clone();
-            let window_title = window_title.clone();
-            let scrolled_window = scrolled_window.clone();
-            move |back_button| {
-                let mut history = history.borrow_mut();
-                history.pop();
-                back_button.set_visible(history.len() > 1);
-                if let Some((body, adjust_scroll)) = history.last() {
-                    let Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-                    window_title.set_title(title.as_str());
-                    window_title.set_subtitle(subtitle.as_str());
-                    scrolled_window.set_child(Some((**widget).as_ref()));
-                    if *adjust_scroll { scrolled_window.adjust(&body_scroll_adjustment); }
-                }
-            }
         });
         let menu = gtk_box(Vertical);
         let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
             .popover(&Popover::builder().child(&menu).build()).build();
-        bar.pack_end(&menu_button);
+        header_bar.pack_end(&menu_button);
         let collection_button = Button::builder().label("Collection").build();
         menu.append(&collection_button);
         collection_button.connect_clicked({
@@ -107,12 +91,12 @@ fn main() -> Result<ExitCode> {
             }
         });
         for body_table in history_bodies {
-            Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(), &media_controls,
+            Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(), &now_playing,
                 &back_button, &window,
             ).put_to_history(body_table.scroll_adjustment, history.clone());
         }
         if empty_history {
-            Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &media_controls,
+            Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &now_playing,
                 &Some(back_button.clone()))
             ).set(&window_title, &scrolled_window, history.clone(), &None);
         } else if let Some((body, _)) = history.borrow().last() {
