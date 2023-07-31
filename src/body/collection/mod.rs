@@ -27,8 +27,8 @@ pub mod model;
 pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Box {
     let add_collection_box = gtk_box(Vertical);
     let collection_box: gtk::Box = CollectionBox::new();
-    let browse_button = Button::builder().label("browse").build();
     add_collection_box.append(&collection_box);
+    let browse_button = Button::builder().label("browse").build();
     add_collection_box.append(&browse_button);
     browse_button.connect_clicked({
         let window = window.clone();

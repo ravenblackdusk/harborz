@@ -44,24 +44,23 @@ fn main() -> Result<ExitCode> {
         let history_bodies = bodies.filter(navigation_type.eq(History)).get_results::<BodyTable>(&mut get_connection())
             .unwrap();
         let empty_history = history_bodies.is_empty();
-        let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home")
-            .visible(history_bodies.len() > 1).build();
         let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
         let window = ApplicationWindow::builder().application(application).content(&main_box)
             .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
             .build();
         let window_title = WindowTitle::builder().title("Harborz").subtitle("Artists").build();
-        let bar = HeaderBar::builder().title_widget(&window_title).build();
-        let collection_button = Button::builder().label("Collection").build();
-        let menu = gtk_box(Vertical);
-        menu.append(&collection_button);
-        let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
-            .popover(&Popover::builder().child(&menu).build()).build();
-        let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
         let history: Rc<RefCell<Vec<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(Vec::new()));
         let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
+        let bar = HeaderBar::builder().title_widget(&window_title).build();
+        main_box.append(&bar);
+        let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
+        main_box.append(&scrolled_window);
+        let back_button = Button::builder().icon_name("go-previous-symbolic").tooltip_text("Home")
+            .visible(history_bodies.len() > 1).build();
+        bar.pack_start(&back_button);
         let media_controls = media_controls(song_selected_body.clone(), &window_title, &scrolled_window,
             history.clone(), &Some(back_button.clone()));
+        main_box.append(&media_controls);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
             .get_result::<BodyTable>(&mut get_connection()).ok().map(|body_table| {
             let body = Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(),
@@ -86,6 +85,12 @@ fn main() -> Result<ExitCode> {
                 }
             }
         });
+        let menu = gtk_box(Vertical);
+        let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
+            .popover(&Popover::builder().child(&menu).build()).build();
+        bar.pack_end(&menu_button);
+        let collection_button = Button::builder().label("Collection").build();
+        menu.append(&collection_button);
         collection_button.connect_clicked({
             let history = history.clone();
             let window = window.clone();
@@ -117,11 +122,6 @@ fn main() -> Result<ExitCode> {
             scrolled_window.set_child(Some((**widget).as_ref()));
             scrolled_window.adjust(&body_scroll_adjustment);
         }
-        main_box.append(&bar);
-        main_box.append(&scrolled_window);
-        main_box.append(&media_controls);
-        bar.pack_start(&back_button);
-        bar.pack_end(&menu_button);
         window.connect_close_request({
             let history = history.clone();
             let scrolled_window = scrolled_window.clone();

@@ -114,6 +114,22 @@ fn connect_accent_if_now_playing(song: &Song, current_song_id: Option<i32>, labe
     });
 }
 
+trait Castable {
+    fn first_child(self) -> Option<Widget>;
+    fn set_label(self, label: &str) -> Label;
+}
+
+impl Castable for Option<Widget> {
+    fn first_child(self) -> Option<Widget> {
+        self.and_downcast::<gtk::Box>().unwrap().first_child()
+    }
+    fn set_label(self, label: &str) -> Label {
+        let result = self.and_downcast::<Label>().unwrap();
+        result.set_label(label);
+        result
+    }
+}
+
 impl Body {
     pub fn from_body_table(body_table: &BodyTable, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, media_controls: &Wrapper, back_button: &Button,
@@ -178,30 +194,27 @@ impl Body {
                     vec![(Box::new(|| {
                         let artist_row = gtk::Box::builder().margin_top(4).margin_bottom(4).build();
                         let artist_box = gtk::Box::builder().orientation(Vertical).build();
+                        artist_row.append(&artist_box);
+                        artist_box.append(&Label::builder().margin_ellipsized(4).bold().build());
                         let count_box = gtk::Box::builder().spacing(4).build();
+                        artist_box.append(&count_box);
                         let album_count_box = gtk::Box::builder().spacing(4).build();
-                        let song_count_box = gtk::Box::builder().spacing(4).build();
                         count_box.append(&album_count_box);
-                        count_box.append(&song_count_box);
                         album_count_box.append(&Label::builder().margin_start(4).subscript().build());
                         album_count_box.append(&Label::builder().label("Albums").subscript().build());
+                        let song_count_box = gtk::Box::builder().spacing(4).build();
+                        count_box.append(&song_count_box);
                         song_count_box.append(&Label::builder().subscript().build());
                         song_count_box.append(&Label::builder().label("Songs").subscript().build());
-                        artist_box.append(&Label::builder().margin_ellipsized(4).bold().build());
-                        artist_box.append(&count_box);
-                        artist_row.append(&artist_box);
                         artist_row.append(&next_icon());
                         Box::new(artist_row)
                     }), Box::new(|rc: Rc<(Option<String>, i64, i64)>, list_item: &ListItem| {
                         let (album_string, album_count, song_count) = rc.borrow();
-                        let artist_box = list_item.child().and_downcast::<gtk::Box>().unwrap().first_child()
-                            .and_downcast::<gtk::Box>().unwrap();
-                        artist_box.first_child().and_downcast::<Label>().unwrap().set_label(or_none(album_string));
+                        let artist_box = list_item.child().first_child().and_downcast::<gtk::Box>().unwrap();
+                        artist_box.first_child().set_label(or_none(album_string));
                         let count_box = artist_box.last_child().and_downcast::<gtk::Box>().unwrap();
-                        count_box.first_child().and_downcast::<gtk::Box>().unwrap().first_child()
-                            .and_downcast::<Label>().unwrap().set_label(&album_count.to_string());
-                        count_box.last_child().and_downcast::<gtk::Box>().unwrap().first_child()
-                            .and_downcast::<Label>().unwrap().set_label(&song_count.to_string());
+                        count_box.first_child().first_child().set_label(&album_count.to_string());
+                        count_box.last_child().first_child().set_label(&song_count.to_string());
                     }), true)], {
                         let window_title = window_title.clone();
                         let scrolled_window = scrolled_window.clone();
@@ -253,21 +266,19 @@ impl Body {
                         ), (Box::new(|| {
                             let album_row = gtk::Box::builder().margin_top(4).margin_bottom(4).build();
                             let album_box = gtk::Box::builder().orientation(Vertical).build();
+                            album_row.append(&album_box);
+                            album_box.append(&Label::builder().margin_ellipsized(4).bold().build());
                             let count_box = gtk::Box::builder().spacing(4).build();
+                            album_box.append(&count_box);
                             count_box.append(&Label::builder().margin_start(4).subscript().build());
                             count_box.append(&Label::builder().label("Songs").subscript().build());
-                            album_box.append(&Label::builder().margin_ellipsized(4).bold().build());
-                            album_box.append(&count_box);
-                            album_row.append(&album_box);
                             album_row.append(&next_icon());
                             Box::new(album_row)
                         }), Box::new(|rc, list_item| {
                             let (album_string, count, _, _) = rc.borrow();
-                            let album_box = list_item.child().and_downcast::<gtk::Box>().unwrap().first_child()
-                                .and_downcast::<gtk::Box>().unwrap();
-                            album_box.first_child().and_downcast::<Label>().unwrap().set_label(or_none(album_string));
-                            album_box.last_child().and_downcast::<gtk::Box>().unwrap().first_child()
-                                .and_downcast::<Label>().unwrap().set_label(&count.to_string());
+                            let album_box = list_item.child().first_child().and_downcast::<gtk::Box>().unwrap();
+                            album_box.first_child().set_label(or_none(album_string));
+                            album_box.last_child().first_child().set_label(&count.to_string());
                         }), true),
                     ], {
                         let media_controls = media_controls.clone();
@@ -315,8 +326,7 @@ impl Body {
                             let (wrapper, song, _) = &*rc;
                             let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection())
                                 .unwrap();
-                            let label = list_item.child().and_downcast::<Label>().unwrap();
-                            label.set_label(song.title_str());
+                            let label = list_item.child().set_label(song.title_str());
                             connect_accent_if_now_playing(song, current_song_id, label, wrapper);
                         }), true),
                         (Box::new(|| { Box::new(Label::builder().bold_subscript().build()) }),
@@ -324,8 +334,7 @@ impl Body {
                                 let (wrapper, song, _) = &*rc;
                                 let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection())
                                     .unwrap();
-                                let label = list_item.child().and_downcast::<Label>().unwrap();
-                                label.set_label(&format(song.duration as u64));
+                                let label = list_item.child().set_label(&format(song.duration as u64));
                                 connect_accent_if_now_playing(song, current_song_id, label, wrapper);
                             }), false),
                     ], {

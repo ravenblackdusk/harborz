@@ -67,11 +67,7 @@ fn update_duration(duration: &mut Option<u64>, label: &Label, scale: &Scale) {
 pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &WindowTitle,
     scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>)
     -> Wrapper {
-    let once = Once::new();
-    let mpris_player = mpris_player();
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
-    let now_playing_and_play_pause = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8)
-        .build();
     let css_provider = CssProvider::new();
     css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
     #accent-progress progress { background-color: @accent_fg_color; }");
@@ -79,8 +75,21 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
         STYLE_PROVIDER_PRIORITY_APPLICATION);
     let progress_bar = ProgressBar::builder().name("accent-progress").build();
     progress_bar.add_css_class("osd");
-    let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
+    now_playing_and_progress.append(&progress_bar);
+    let now_playing_and_play_pause = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8)
+        .build();
+    now_playing_and_progress.append(&now_playing_and_play_pause);
+    let now_playing = gtk::Box::builder().build();
+    now_playing_and_play_pause.append(&now_playing);
+    let skip_song_gesture = GestureSwipe::new();
+    skip_song_gesture.connect_swipe(|_, velocity_x, velocity_y| {
+        if velocity_x.abs() > velocity_y.abs() {
+            go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
+        }
+    });
+    now_playing.add_controller(skip_song_gesture);
     let album_image = Image::builder().pixel_size(56).build();
+    now_playing.append(&album_image);
     let song_selected_body_gesture = GestureLongPress::new();
     song_selected_body_gesture.connect_pressed({
         let song_selected_body = song_selected_body.clone();
@@ -95,33 +104,19 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
         }
     });
     album_image.add_controller(song_selected_body_gesture);
-    let now_playing = gtk::Box::builder().build();
-    let skip_song_gesture = GestureSwipe::new();
-    skip_song_gesture.connect_swipe(|_, velocity_x, velocity_y| {
-        if velocity_x.abs() > velocity_y.abs() {
-            go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
-        }
-    });
-    now_playing.add_controller(skip_song_gesture);
-    now_playing_and_play_pause.append(&now_playing);
-    now_playing.append(&album_image);
+    let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
     now_playing.append(&song_info);
-    let play_pause = Button::builder().width_request(40).build();
-    play_pause.play();
-    play_pause.add_css_class("flat");
-    now_playing_and_play_pause.append(&play_pause);
     let song_label = Label::builder().margin_ellipsized(4).bold().build();
-    let artist_label = Label::builder().margin_ellipsized(4).build();
     song_info.append(&song_label);
+    let artist_label = Label::builder().margin_ellipsized(4).build();
     song_info.append(&artist_label);
     let position_label = Label::builder().label(&format(0)).margin_ellipsized(4).build();
-    let duration_label = Label::new(Some(&format(0)));
     song_info.append(&position_label);
-    let scale = Scale::builder().hexpand(true).build();
-    scale.set_range(0.0, 1.0);
-    now_playing_and_progress.append(&progress_bar);
-    now_playing_and_progress.append(&now_playing_and_play_pause);
-    play_pause.connect_clicked(move |play_pause| {
+    let play_pause = Button::builder().width_request(40).build();
+    now_playing_and_play_pause.append(&play_pause);
+    play_pause.play();
+    play_pause.add_css_class("flat");
+    play_pause.connect_clicked(|play_pause| {
         if PLAYBIN.current_state() == Playing {
             PLAYBIN.set_state(Paused).unwrap();
             play_pause.play();
@@ -132,6 +127,9 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
             }
         }
     });
+    let duration_label = Label::new(Some(&format(0)));
+    let scale = Scale::builder().hexpand(true).build();
+    scale.set_range(0.0, 1.0);
     let mut duration: Option<u64> = None;
     scale.connect_change_value({
         let position_label = position_label.clone();
@@ -147,25 +145,7 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
             Inhibit(true)
         }
     });
-    let wrapper = Wrapper::new(&now_playing_and_progress);
-    wrapper.connect_local(SONG_SELECTED, true, {
-        let play_pause = play_pause.clone();
-        move |params| {
-            if let [_, current_song_path, collection_path] = &params {
-                let playing = PLAYBIN.current_state() == Playing;
-                PLAYBIN.set_state(Null).unwrap();
-                PLAYBIN.set_uri(&join_path(&collection_path.get::<String>().unwrap(),
-                    &current_song_path.get::<String>().unwrap()));
-                if playing {
-                    PLAYBIN.set_state(Playing).unwrap();
-                } else {
-                    play_pause.emit_clicked();
-                }
-                *song_selected_body.borrow_mut() = history.borrow().last().map(|(body, _)| { body }).cloned();
-            }
-            None
-        }
-    });
+    let mpris_player = mpris_player();
     mpris_player.connect_play_pause({
         let play_pause = play_pause.clone();
         move || { play_pause.emit_clicked(); }
@@ -174,7 +154,10 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
         let play_pause = play_pause.clone();
         move || { if PLAYBIN.current_state() != Playing { play_pause.emit_clicked(); } }
     });
-    mpris_player.connect_pause(move || { if PLAYBIN.current_state() != Paused { play_pause.emit_clicked(); } });
+    mpris_player.connect_pause({
+        let play_pause = play_pause.clone();
+        move || { if PLAYBIN.current_state() != Paused { play_pause.emit_clicked(); } }
+    });
     mpris_player.connect_seek({
         let position_label = position_label.clone();
         let progress_bar = progress_bar.clone();
@@ -185,6 +168,23 @@ pub fn media_controls(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_
         }
     });
     let tracking_position = Rc::new(Cell::new(false));
+    let once = Once::new();
+    let wrapper = Wrapper::new(&now_playing_and_progress);
+    wrapper.connect_local(SONG_SELECTED, true, move |params| {
+        if let [_, current_song_path, collection_path] = &params {
+            let playing = PLAYBIN.current_state() == Playing;
+            PLAYBIN.set_state(Null).unwrap();
+            PLAYBIN.set_uri(&join_path(&collection_path.get::<String>().unwrap(),
+                &current_song_path.get::<String>().unwrap()));
+            if playing {
+                PLAYBIN.set_state(Playing).unwrap();
+            } else {
+                play_pause.emit_clicked();
+            }
+            *song_selected_body.borrow_mut() = history.borrow().last().map(|(body, _)| { body }).cloned();
+        }
+        None
+    });
     PLAYBIN.bus().unwrap().add_watch_local({
         let scale = scale.clone();
         let wrapper = wrapper.clone();
