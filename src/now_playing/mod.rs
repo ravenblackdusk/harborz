@@ -47,7 +47,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     let now_playing = Rc::new(RefCell::new(NowPlaying {
         cover: None,
         bottom_image: Image::builder().pixel_size(56).build(),
-        body_image: Image::builder().pixel_size(720).build(),
+        body_image: Image::builder().pixel_size(360).build(),
         position: 0,
         duration: None,
         progress_bar: ProgressBar::builder().name("accent-progress").build(),
