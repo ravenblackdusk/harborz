@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use gtk::{Button, CssProvider, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk::{Button, CssProvider, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use adw::prelude::*;
 use adw::WindowTitle;
 use gtk::Orientation::Vertical;
@@ -54,8 +54,9 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
         let scrolled_window = scrolled_window.clone();
         let history = history.clone();
         let back_button = back_button.clone();
-        move |_, _, _| {
+        move |gesture, _, _| {
             if let Some(body) = song_selected_body.borrow().as_ref() {
+                gesture.set_state(EventSequenceState::Claimed);
                 body.clone().set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
             }
         }
