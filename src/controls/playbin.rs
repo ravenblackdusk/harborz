@@ -8,6 +8,7 @@ use gstreamer::glib::{Cast, ObjectExt};
 use gstreamer::prelude::{ElementExt, ElementExtManual};
 use gstreamer::State::*;
 use gtk::{Label, ProgressBar, Scale};
+use log::warn;
 use once_cell::sync::Lazy;
 use crate::body::collection::model::Collection;
 use crate::common::util::format;
@@ -27,7 +28,9 @@ pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     if let Ok((song, collection, _)) = songs.inner_join(collections).inner_join(config)
         .get_result::<(Song, Collection, Config)>(&mut get_connection()) {
         playbin.set_uri(&(&song, &collection).path());
-        playbin.set_state(Paused).unwrap();
+        if let Err(error) = playbin.set_state(Paused) {
+            warn!("error setting playbin state to Paused {}", error);
+        }
     }
     playbin.connect("about-to-finish", true, |_| {
         go_delta_song(1, false);
