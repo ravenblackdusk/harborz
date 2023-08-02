@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use gtk::{Button, CssProvider, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use adw::prelude::*;
 use adw::WindowTitle;
+use gtk::{Button, CssProvider, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Orientation::Vertical;
 use crate::body::Body;
 use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder};
@@ -56,8 +56,15 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
         let back_button = back_button.clone();
         move |gesture, _, _| {
             if let Some(body) = song_selected_body.borrow().as_ref() {
-                gesture.set_state(EventSequenceState::Claimed);
-                body.clone().set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
+                let song_selected_body_realized = if let Some((last, _)) = history.borrow().last() {
+                    Rc::ptr_eq(last, body)
+                } else {
+                    return;
+                };
+                if !song_selected_body_realized {
+                    gesture.set_state(EventSequenceState::Claimed);
+                    body.clone().set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
+                }
             }
         }
     });
