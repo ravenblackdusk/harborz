@@ -6,7 +6,6 @@ use TryRecvError::{Disconnected, Empty};
 use adw::ApplicationWindow;
 use adw::prelude::*;
 use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
-use diesel::dsl::max;
 use diesel::prelude::*;
 use diesel::result::Error;
 use gtk::{Button, FileDialog, ProgressBar};
@@ -17,7 +16,7 @@ use crate::body::collection::model::Collection;
 use crate::body::collection::r#box::CollectionBox;
 use crate::common::gtk_box;
 use crate::db::get_connection;
-use crate::schema::collections::{modified, path, row};
+use crate::schema::collections::{modified, path};
 use crate::schema::collections::dsl::collections;
 use crate::song::{import_songs, ImportProgress};
 
@@ -34,10 +33,10 @@ pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Bo
         let window = window.clone();
         move |_| {
             FileDialog::builder().title("Collection directories").accept_label("Choose").build()
-                .open_multiple(Some(&window), Cancellable::NONE, {
+                .select_multiple_folders(Some(&window), Cancellable::NONE, {
                     let collection_box = collection_box.clone();
                     move |files| {
-                        if let Ok(files) = files {
+                        if let Ok(Some(files)) = files {
                             let (sender, receiver) = channel::<ImportProgress>();
                             let mut last_id: Option<i32> = None;
                             let mut progress_bar_map = HashMap::new();
@@ -79,9 +78,7 @@ pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Bo
                                         get_connection().transaction({
                                             let sender = sender.clone();
                                             |connection| {
-                                                let max_row = collections.select(max(row)).get_result::<Option<i32>>(connection)?;
-                                                match insert_or_ignore_into(collections)
-                                                    .values((path.eq(path_string), row.eq(max_row.unwrap_or(0) + 1)))
+                                                match insert_or_ignore_into(collections).values(path.eq(path_string))
                                                     .get_result::<Collection>(connection) {
                                                     Err(Error::NotFound) => {}
                                                     Ok(collection) => {

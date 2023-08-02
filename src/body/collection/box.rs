@@ -1,5 +1,4 @@
-use std::ops::Add;
-use diesel::{Connection, delete, ExpressionMethods, QueryDsl, RunQueryDsl, update};
+use diesel::{delete, QueryDsl, RunQueryDsl};
 use gtk::{Button, Label, prelude};
 use gtk::Orientation::{Horizontal, Vertical};
 use prelude::*;
@@ -8,7 +7,6 @@ use crate::common::{EllipsizedLabelBuilder, gtk_box};
 use crate::common::util::PathString;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
-use crate::schema::collections::row;
 
 pub(in crate::body::collection) trait CollectionBox {
     fn new() -> Self;
@@ -33,10 +31,7 @@ impl CollectionBox for gtk::Box {
         remove_button.connect_clicked({
             let this = self.clone();
             move |_| {
-                get_connection().transaction(|connection| {
-                    let db_collection = delete(collections.find(id)).get_result::<Collection>(connection)?;
-                    update(collections.filter(row.gt(db_collection.row))).set(row.eq(row.add(-1))).execute(connection)
-                }).unwrap();
+                delete(collections.find(id)).execute(&mut get_connection()).unwrap();
                 this.remove(&inner_box);
             }
         });
