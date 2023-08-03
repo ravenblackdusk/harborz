@@ -4,13 +4,13 @@ use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use TryRecvError::{Disconnected, Empty};
 use adw::ApplicationWindow;
+use adw::glib::{ControlFlow, timeout_add_local};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
 use diesel::prelude::*;
 use diesel::result::Error;
 use gtk::{Button, FileDialog, ProgressBar};
 use gtk::gio::{Cancellable, File};
-use gtk::glib::timeout_add_local;
 use gtk::Orientation::Vertical;
 use crate::body::collection::model::Collection;
 use crate::body::collection::r#box::CollectionBox;
@@ -43,7 +43,7 @@ pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Bo
                             timeout_add_local(Duration::from_millis(200), {
                                 let collection_box = collection_box.clone();
                                 move || {
-                                    Continue(match receiver.try_recv() {
+                                    if match receiver.try_recv() {
                                         Err(Empty) => { true }
                                         Err(Disconnected) => { false }
                                         Ok(import_progress) => {
@@ -66,7 +66,7 @@ pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Bo
                                                 }
                                             }
                                         }
-                                    })
+                                    } { ControlFlow::Continue } else { ControlFlow::Break }
                                 }
                             });
                             let paths = files.iter::<File>().map(|file| { Some(file.unwrap().path()?.to_str()?.to_owned()) })

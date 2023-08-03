@@ -3,37 +3,38 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
+use adw::glib::Propagation;
 use adw::prelude::*;
 use adw::WindowTitle;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
 use gstreamer::glib::timeout_add_local;
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
-use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, ObjectExt, GstObjectExt};
+use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, GstObjectExt, ObjectExt as GstreamerObject};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, Image, Inhibit, Label, ProgressBar, Scale, ScrolledWindow, ScrollType};
+use gtk::{Button, Image, Label, ProgressBar, Scale, ScrolledWindow, ScrollType};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use util::format;
 use crate::body::Body;
 use crate::body::collection::model::Collection;
-use crate::song::{get_current_song, join_path, Song, WithCover};
-use crate::song::WithPath;
 use crate::common::{AdjustableScrolledWindow, EllipsizedLabelBuilder, util};
 use crate::common::constant::BACK_ICON;
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
-use crate::now_playing::mpris::mpris_player;
-use crate::now_playing::bottom_widget::Playable;
-use crate::now_playing::playbin::{PLAYBIN, Playbin, URI};
 use crate::db::get_connection;
+use crate::now_playing::bottom_widget::Playable;
+use crate::now_playing::mpris::mpris_player;
 use crate::now_playing::now_playing::NowPlaying;
+use crate::now_playing::playbin::{PLAYBIN, Playbin, URI};
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::path as song_path;
+use crate::song::{get_current_song, join_path, Song, WithCover};
+use crate::song::WithPath;
 
 pub mod playbin;
 mod mpris;
@@ -119,7 +120,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                     warn!("error trying to seek to {} {}", value, error);
                 }
             }
-            Inhibit(true)
+            Propagation::Stop
         }
     });
     let mpris_player = mpris_player();

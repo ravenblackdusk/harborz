@@ -1,9 +1,9 @@
 use std::cell::RefCell;
+use adw::glib::{self, ParamSpec, Properties};
+use adw::glib::subclass::Signal;
 use adw::prelude::*;
+use adw::subclass::prelude::*;
 use gtk::*;
-use gtk::glib::{self, ParamSpec, Properties};
-use gtk::glib::subclass::Signal;
-use gtk::subclass::prelude::*;
 use gtk::Widget;
 use once_cell::sync::Lazy;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED};

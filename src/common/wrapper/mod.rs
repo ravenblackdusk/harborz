@@ -1,5 +1,5 @@
-use gtk::{glib, Widget};
-use gtk::glib::{Cast, IsA, Object};
+use adw::glib::{self, Cast, IsA, Object};
+use gtk::Widget;
 
 mod imp;
 

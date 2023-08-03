@@ -2,28 +2,27 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::{Application, ApplicationWindow, HeaderBar, WindowTitle};
-use adw::glib::signal::Inhibit;
+use adw::glib::{ExitCode, Propagation};
 use adw::prelude::*;
 use diesel::{delete, ExpressionMethods, insert_into, QueryDsl, RunQueryDsl, update};
 use diesel::migration::Result;
 use diesel_migrations::MigrationHarness;
 use gtk::{Button, MenuButton, Popover, ScrolledWindow};
 use gtk::Align::Fill;
-use gtk::glib::ExitCode;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
 use NavigationType::History;
-use crate::body::{Body, BodyType, BodyTable, NavigationType};
+use crate::body::{Body, BodyTable, BodyType, NavigationType};
 use crate::body::NavigationType::SongSelected;
 use crate::common::{AdjustableScrolledWindow, gtk_box};
 use crate::common::constant::{APP_ID, BACK_ICON};
 use crate::config::Config;
-use crate::now_playing::playbin::{PLAYBIN, Playbin};
 use crate::db::get_connection;
-use crate::schema::config::{current_song_position, maximized, window_height, window_width};
-use crate::schema::config::dsl::config as config_table;
+use crate::now_playing::playbin::{PLAYBIN, Playbin};
 use crate::schema::bodies::{body_type, navigation_type, query1, query2, scroll_adjustment};
 use crate::schema::bodies::dsl::bodies;
+use crate::schema::config::{current_song_position, maximized, window_height, window_width};
+use crate::schema::config::dsl::config as config_table;
 
 mod schema;
 mod db;
@@ -135,7 +134,7 @@ fn main() -> Result<ExitCode> {
                             )
                         }).collect::<Vec<_>>()
                 ).execute(&mut get_connection()).unwrap();
-                Inhibit(false)
+                Propagation::Proceed
             }
         });
         window.present();

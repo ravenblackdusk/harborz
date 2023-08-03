@@ -3,12 +3,12 @@ use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::{ApplicationWindow, WindowTitle};
+use adw::glib::BoxedAnyObject;
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use diesel::dsl::{count_distinct, count_star, min};
 use gtk::{Button, ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelection, ScrolledWindow, SignalListItemFactory, Widget};
 use gtk::gio::ListStore;
-use gtk::glib::BoxedAnyObject;
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
@@ -65,7 +65,7 @@ pub struct Body {
 
 fn column_view<T: 'static, S: Fn(Rc<T>, &ListItem) + ?Sized + 'static, F: Fn(Rc<T>) + 'static>(row_items: Vec<Rc<T>>,
     columns: Vec<(Box<dyn Fn() -> Box<dyn AsRef<Widget>>>, Box<S>, bool)>, on_row_activated: F) -> ColumnView {
-    let store = ListStore::new(BoxedAnyObject::static_type());
+    let store = ListStore::new::<BoxedAnyObject>();
     for row_item in row_items.iter() {
         store.append(&BoxedAnyObject::new(row_item.clone()));
     }

@@ -3,13 +3,13 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
+use adw::glib::{ControlFlow, timeout_add};
 use diesel::{BoolExpressionMethods, ExpressionMethods, insert_or_ignore_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::result::Error;
 use gstreamer::ClockTime;
 use gstreamer::tags::{Album, AlbumArtist, Artist, DateTime, Genre, Title, TrackNumber};
 use gstreamer_pbutils::Discoverer;
-use gtk::glib::{Continue, timeout_add};
 use once_cell::sync::Lazy;
 use walkdir::WalkDir;
 use crate::body::collection::model::Collection;
@@ -87,7 +87,7 @@ pub fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
         move || {
             let count = count.lock().unwrap();
             sender.send(ImportProgress::Fraction(*count / total)).unwrap();
-            Continue(*count < total)
+            if *count < total { ControlFlow::Continue } else { ControlFlow::Break }
         }
     });
     let result = WalkDir::new(&collection.path).into_iter().filter_map(|entry_result| {
