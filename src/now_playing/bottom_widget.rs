@@ -48,7 +48,9 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
             }
         }
     });
-    now_playing.borrow().bottom_image.add_controller(song_selected_body_gesture);
+    now_playing.borrow().bottom_image.connect_realize(move |bottom_image| {
+        bottom_image.add_controller(song_selected_body_gesture.clone());
+    });
     let image_click = GestureClick::new();
     now_playing.borrow().bottom_image.add_controller(image_click.clone());
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(4).build();
