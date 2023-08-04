@@ -99,9 +99,8 @@ fn main() -> Result<ExitCode> {
                 &Some(back_button.clone()))
             ).set(&window_title, &scrolled_window, history.clone(), &None);
         } else if let Some((body, _)) = history.borrow().last() {
-            let Body { title, subtitle, widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-            window_title.set_title(title.as_str());
-            window_title.set_subtitle(subtitle.as_str());
+            body.set_window_title(&window_title);
+            let Body { widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
             scrolled_window.set_child(Some((**widget).as_ref()));
             scrolled_window.adjust(&body_scroll_adjustment);
         }

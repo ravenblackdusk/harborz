@@ -130,6 +130,10 @@ impl Castable for Option<Widget> {
 }
 
 impl Body {
+    pub fn set_window_title(&self, window_title: &WindowTitle) {
+        window_title.set_title(&self.title);
+        window_title.set_subtitle(&self.subtitle);
+    }
     pub fn from_body_table(body_table: &BodyTable, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper, back_button: &Button,
         window: &ApplicationWindow) -> Self {
@@ -154,8 +158,7 @@ impl Body {
     pub fn set(self: Rc<Self>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>) {
         if let Some(back_button) = back_button { back_button.set_visible(true); }
-        window_title.set_title(&self.title);
-        window_title.set_subtitle(&self.subtitle);
+        self.set_window_title(window_title);
         let mut history = history.borrow_mut();
         if let Some((body, _)) = history.last() {
             let Body { scroll_adjustment, .. } = body.deref();

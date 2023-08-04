@@ -16,5 +16,6 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (g
     time.append(&now_playing.borrow().scale);
     let duration_label = Label::new(Some(&format(0)));
     time.append(&duration_label);
+    body.append(&now_playing.borrow().body_play_pause);
     (body, duration_label)
 }
