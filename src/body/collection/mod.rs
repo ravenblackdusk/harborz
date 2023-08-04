@@ -4,13 +4,13 @@ use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use TryRecvError::{Disconnected, Empty};
 use adw::ApplicationWindow;
+use adw::gio::{Cancellable, File};
 use adw::glib::{ControlFlow, timeout_add_local};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
 use diesel::prelude::*;
 use diesel::result::Error;
 use gtk::{Button, FileDialog, ProgressBar};
-use gtk::gio::{Cancellable, File};
 use gtk::Orientation::Vertical;
 use crate::body::collection::model::Collection;
 use crate::body::collection::r#box::CollectionBox;
@@ -27,7 +27,8 @@ pub(in crate::body) fn add_collection_box(window: &ApplicationWindow) -> gtk::Bo
     let add_collection_box = gtk_box(Vertical);
     let collection_box: gtk::Box = CollectionBox::new();
     add_collection_box.append(&collection_box);
-    let browse_button = Button::builder().label("browse").build();
+    let browse_button = Button::builder().label("Browse").build();
+    browse_button.add_css_class("suggested-action");
     add_collection_box.append(&browse_button);
     browse_button.connect_clicked({
         let window = window.clone();

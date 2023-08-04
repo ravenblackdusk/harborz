@@ -23,6 +23,7 @@ impl CollectionBox for gtk::Box {
     }
     fn add(&self, id: i32, path: &String) {
         let remove_button = Button::builder().icon_name("list-remove").build();
+        remove_button.add_css_class("destructive-action");
         let inner_box = gtk_box(Horizontal);
         inner_box.append(&Label::builder().label(path.to_path().file_name().unwrap().to_str().unwrap())
             .margin_ellipsized(4).build());
