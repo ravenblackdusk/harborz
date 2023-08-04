@@ -12,7 +12,7 @@ use gtk::{Button, ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelect
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{AdjustableScrolledWindow, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf, SubscriptLabelBuilder};
+use crate::common::{AdjustableScrolledWindow, ALBUM, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf, SubscriptLabelBuilder};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -256,7 +256,7 @@ impl Body {
                                 let (_, _, collection_path, album_song_path) = rc.borrow();
                                 let cover = join_path(&collection_path.clone().unwrap(),
                                     &album_song_path.clone().unwrap()).cover();
-                                list_item.child().and_downcast::<Image>().unwrap().set_cover(&cover);
+                                list_item.child().and_downcast::<Image>().unwrap().set_cover(&cover, ALBUM);
                             }) as Box<dyn Fn(Rc<(Option<String>, i64, Option<String>, Option<String>)>, &ListItem)>,
                             false
                         ), (Box::new(|| {

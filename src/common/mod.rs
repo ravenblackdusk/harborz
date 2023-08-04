@@ -89,12 +89,19 @@ impl AdjustableScrolledWindow for ScrolledWindow {
     }
 }
 
+pub struct IconType {
+    icon_name: &'static str,
+}
+
+pub const SONG: IconType = IconType { icon_name: "audio-x-generic" };
+pub const ALBUM: IconType = IconType { icon_name: "folder-music" };
+
 pub trait ImagePathBuf {
-    fn set_cover(&self, cover: &PathBuf);
+    fn set_cover(&self, cover: &PathBuf, icon_type: IconType);
 }
 
 impl ImagePathBuf for Image {
-    fn set_cover(&self, cover: &PathBuf) {
-        if cover.exists() { self.set_from_file(Some(&cover)); } else { self.set_icon_name(Some("audio-x-generic")); }
+    fn set_cover(&self, cover: &PathBuf, icon_type: IconType) {
+        if cover.exists() { self.set_from_file(Some(&cover)); } else { self.set_icon_name(Some(icon_type.icon_name)); }
     }
 }

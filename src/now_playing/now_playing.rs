@@ -4,7 +4,7 @@ use adw::WindowTitle;
 use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf, SONG};
 use crate::common::util::format;
 use crate::now_playing::playbin::PLAYBIN;
 
@@ -99,7 +99,8 @@ impl NowPlaying {
     }
     fn update_image(&self, other: bool) {
         if let Some(cover) = &self.cover {
-            if self.body_image.is_realized() != other { &self.body_image } else { &self.bottom_image }.set_cover(cover);
+            if self.body_image.is_realized() != other { &self.body_image } else { &self.bottom_image }
+                .set_cover(cover, SONG);
         }
     }
     fn update_position(&self, other: bool) {
