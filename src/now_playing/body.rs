@@ -19,7 +19,7 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> gt
     info.append(&time);
     time.append(&now_playing.borrow().body_position);
     time.append(&now_playing.borrow().body_duration);
-    let controls = gtk::Box::builder().build();
+    let controls = gtk::Box::builder().margin_bottom(4).build();
     info.append(&controls);
     let skip_backward = Button::builder().hexpand(true).tooltip_text("Previous")
         .child(&Image::builder().icon_name("media-skip-backward").pixel_size(40).build()).build().flat();
