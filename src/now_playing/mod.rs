@@ -202,7 +202,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                                 .get_result::<(Collection, Song)>(connection)?;
                             update(config).set(current_song_id.eq(song.id)).execute(connection)?;
                             let title = song.title_str().to_owned();
-                            now_playing.borrow_mut().set_song_info(or_none(&song.artist), &title, &window_title);
+                            now_playing.borrow_mut().set_song_info(&title, or_none(&song.artist), &window_title);
                             let cover = (&song, &collection).path().cover();
                             let art_url = now_playing.borrow_mut().set_album_image(cover);
                             wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);

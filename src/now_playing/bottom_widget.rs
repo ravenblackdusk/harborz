@@ -5,6 +5,7 @@ use adw::WindowTitle;
 use gtk::{Button, CssProvider, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Orientation::Vertical;
 use crate::body::Body;
+use crate::common::MonospaceLabel;
 use crate::now_playing::now_playing::NowPlaying;
 
 pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
@@ -55,12 +56,12 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     now_playing.borrow().bottom_image.add_controller(image_click.clone());
     let song_info = gtk::Box::builder().orientation(Vertical).margin_start(8).build();
     now_playing_box.append(&song_info);
-    song_info.append(&now_playing.borrow().song_label);
-    song_info.append(&now_playing.borrow().artist_label);
-    let time_box = gtk::Box::builder().spacing(4).build();
+    song_info.append(&now_playing.borrow().bottom_song);
+    song_info.append(&now_playing.borrow().bottom_artist);
+    let time_box = gtk::Box::builder().spacing(4).margin_top(4).build();
     song_info.append(&time_box);
     time_box.append(&now_playing.borrow().bottom_position);
-    time_box.append(&Label::new(Some("/")));
+    time_box.append(&Label::new(Some("/")).monospace());
     time_box.append(&now_playing.borrow().bottom_duration);
     now_playing_and_play_pause.append(&now_playing.borrow().bottom_play_pause);
     (now_playing_and_progress, skip_song_gesture, image_click)

@@ -5,6 +5,7 @@ use adw::WindowTitle;
 use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
+use gtk::Align::{Start, End};
 use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, FlatButton, ImagePathBuf, MonospaceLabel, SONG};
 use crate::common::util::{format, format_pad};
 use crate::now_playing::playbin::PLAYBIN;
@@ -58,8 +59,10 @@ pub struct NowPlaying {
     pub body_play_pause: Button,
     pub song: String,
     pub artist: String,
-    pub song_label: Label,
-    pub artist_label: Label,
+    pub bottom_song: Label,
+    pub body_song: Label,
+    pub bottom_artist: Label,
+    pub body_artist: Label,
 }
 
 impl NowPlaying {
@@ -79,17 +82,19 @@ impl NowPlaying {
             progress_bar: ProgressBar::builder().name("accent-progress").build(),
             scale,
             bottom_position: Label::builder().label(&format(0)).build().monospace(),
-            body_position: Label::builder().label(&format(0)).build().monospace(),
+            body_position: Label::builder().label(&format(0)).hexpand(true).halign(Start).build().monospace(),
             bottom_duration: Label::new(Some(&format(0))).monospace(),
-            body_duration: Label::new(Some(&format(0))).monospace(),
+            body_duration: Label::builder().label(&format(0)).hexpand(true).halign(End).build().monospace(),
             bottom_play_pause: Self::flat_play(Button::builder()
                 .child(&Image::builder().pixel_size(40).build()).build()),
             body_play_pause: Self::flat_play(Button::builder().hexpand(true)
-                .child(&Image::builder().pixel_size(80).build()).build()),
+                .child(&Image::builder().pixel_size(40).build()).build()),
             song: String::from(""),
             artist: String::from(""),
-            song_label: Label::builder().ellipsized().bold().build(),
-            artist_label: Label::builder().ellipsized().build(),
+            bottom_song: Label::builder().ellipsized().bold().build(),
+            body_song: Label::builder().ellipsized().bold().build(),
+            bottom_artist: Label::builder().ellipsized().build(),
+            body_artist: Label::builder().ellipsized().build(),
         }
     }
     pub(in crate::now_playing) fn click_play_pause(&self) {
@@ -97,13 +102,15 @@ impl NowPlaying {
             .emit_clicked();
     }
     fn update_song_info(&self, other: bool, window_title: &WindowTitle) {
-        if self.song_label.is_realized() != other {
-            self.song_label.set_label(&self.song);
-            self.artist_label.set_label(&self.artist);
+        let (song, artist) = if self.bottom_song.is_realized() != other {
+            (&self.bottom_song, &self.bottom_artist)
         } else {
             window_title.set_title(&self.song);
             window_title.set_subtitle(&self.artist);
-        }
+            (&self.body_song, &self.body_artist)
+        };
+        song.set_label(&self.song);
+        artist.set_label(&self.artist);
     }
     fn update_image(&self, other: bool) {
         if let Some(cover) = &self.cover {
