@@ -1,11 +1,11 @@
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::time::Duration;
+use adw::prelude::*;
 use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
 use adw::glib::timeout_add_local_once;
-use gtk::{Box, Image, Orientation, ScrolledWindow};
+use gtk::{Box, Image, Label, Orientation, ScrolledWindow};
 use gtk::builders::{BoxBuilder, LabelBuilder};
-use gtk::prelude::AdjustmentExt;
 
 pub mod util;
 pub mod wrapper;
@@ -103,5 +103,16 @@ pub trait ImagePathBuf {
 impl ImagePathBuf for Image {
     fn set_cover(&self, cover: &PathBuf, icon_type: IconType) {
         if cover.exists() { self.set_from_file(Some(&cover)); } else { self.set_icon_name(Some(icon_type.icon_name)); }
+    }
+}
+
+pub trait MonospaceLabel{
+    fn monospace(self) -> Self;
+}
+
+impl MonospaceLabel for Label {
+    fn monospace(self) -> Self {
+        self.add_css_class("monospace");
+        self
     }
 }

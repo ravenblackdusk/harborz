@@ -44,7 +44,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Button,
     header_body: &gtk::Box, body: &gtk::Box) -> Wrapper {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
-    let (now_playing_body, duration_label) = body::create(now_playing.clone());
+    let now_playing_body = body::create(now_playing.clone());
     let (bottom_widget, skip_song_gesture, image_click) = bottom_widget::create(
         now_playing.clone(), song_selected_body.clone(), window_title, scrolled_window, history.clone(), back_button,
     );
@@ -55,21 +55,18 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     });
     image_click.connect_released({
         let now_playing = now_playing.clone();
-        let duration_label = duration_label.clone();
         let window_title = window_title.clone();
         let back_button = back_button.clone();
         let header_body = header_body.clone();
         let now_playing_body = now_playing_body.clone();
         move |gesture, _, _, _| {
             gesture.set_state(EventSequenceState::Claimed);
-            now_playing.borrow()
-                .update_other(&duration_label, &window_title, &back_button, "go-down", &header_body, &now_playing_body);
+            now_playing.borrow().update_other(&window_title, &back_button, "go-down", &header_body, &now_playing_body);
         }
     });
     back_button.connect_clicked({
         let history = history.clone();
         let now_playing = now_playing.clone();
-        let duration_label = duration_label.clone();
         let header_body = header_body.clone();
         let body = body.clone();
         let window_title = window_title.clone();
@@ -79,8 +76,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
             if back_button.icon_name().unwrap() == BACK_ICON {
                 history.pop();
             } else {
-                now_playing.borrow()
-                    .update_other(&duration_label, &window_title, &back_button, BACK_ICON, &header_body, &body);
+                now_playing.borrow().update_other(&window_title, &back_button, BACK_ICON, &header_body, &body);
             }
             back_button.set_visible(history.len() > 1);
             if let Some((body, adjust_scroll)) = history.last() {
@@ -191,13 +187,13 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                         once.call_once(|| {
                             if let Ok((song, Config { current_song_position, .. }, _))
                                 = get_current_song(&mut get_connection()) {
-                                now_playing.borrow_mut().duration = Some(song.duration as u64);
+                                now_playing.borrow_mut().duration = song.duration as u64;
                                 PLAYBIN.seek_internal(current_song_position as u64, now_playing.clone()).unwrap();
                             }
                         });
-                        now_playing.borrow_mut().set_duration(&duration_label);
+                        now_playing.borrow_mut().set_duration();
                     }
-                    DurationChanged(_) => { now_playing.borrow_mut().set_duration(&duration_label); }
+                    DurationChanged(_) => { now_playing.borrow_mut().set_duration(); }
                     StreamStart(_) => {
                         let uri = &PLAYBIN.property::<String>("current-uri")[5.. /* remove "file:" */];
                         get_connection().transaction(|connection| {

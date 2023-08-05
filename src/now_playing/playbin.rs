@@ -65,7 +65,7 @@ impl Playbin for Pipeline {
             let nanos = delta.as_nanos() as i64;
             self.seek_internal(
                 ((position as i64) + if forward { nanos } else { -nanos })
-                    .clamp(0, now_playing.clone().borrow().duration.unwrap_or(u64::MAX) as i64) as u64, now_playing,
+                    .clamp(0, now_playing.clone().borrow().duration as i64) as u64, now_playing,
             ).unwrap();
         }
     }

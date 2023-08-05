@@ -14,8 +14,12 @@ impl PathString for String {
 }
 
 pub fn format(timestamp: u64) -> String {
+    format_pad(timestamp, 1)
+}
+
+pub fn format_pad(timestamp: u64, width: usize) -> String {
     let seconds = Duration::from_nanos(timestamp).as_secs();
-    format!("{}:{:02}", seconds / 60, seconds % 60)
+    format!("{:0width$}:{:02}", seconds / 60, seconds % 60, width = width)
 }
 
 pub fn or_none(string: &Option<String>) -> &str {
