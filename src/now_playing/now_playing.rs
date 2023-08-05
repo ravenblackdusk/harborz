@@ -5,7 +5,7 @@ use adw::WindowTitle;
 use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf, MonospaceLabel, SONG};
+use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, FlatButton, ImagePathBuf, MonospaceLabel, SONG};
 use crate::common::util::{format, format_pad};
 use crate::now_playing::playbin::PLAYBIN;
 
@@ -31,7 +31,7 @@ pub(in crate::now_playing) trait Playable {
 
 impl Playable for Button {
     fn change_state(&self, play_pause_info: PlayPauseInfo) {
-        self.set_icon_name(play_pause_info.icon_name);
+        self.child().and_downcast::<Image>().unwrap().set_icon_name(Some(play_pause_info.icon_name));
         self.set_tooltip_text(Some(play_pause_info.tooltip));
     }
     fn play(&self) {
@@ -65,8 +65,7 @@ pub struct NowPlaying {
 impl NowPlaying {
     fn flat_play(button: Button) -> Button {
         button.play();
-        button.add_css_class("flat");
-        button
+        button.flat()
     }
     pub(in crate::now_playing) fn new() -> Self {
         let scale = Scale::builder().hexpand(true).build();
@@ -83,8 +82,10 @@ impl NowPlaying {
             body_position: Label::builder().label(&format(0)).build().monospace(),
             bottom_duration: Label::new(Some(&format(0))).monospace(),
             body_duration: Label::new(Some(&format(0))).monospace(),
-            bottom_play_pause: Self::flat_play(Button::builder().width_request(40).build()),
-            body_play_pause: Self::flat_play(Button::builder().build()),
+            bottom_play_pause: Self::flat_play(Button::builder()
+                .child(&Image::builder().pixel_size(40).build()).build()),
+            body_play_pause: Self::flat_play(Button::builder().hexpand(true)
+                .child(&Image::builder().pixel_size(80).build()).build()),
             song: String::from(""),
             artist: String::from(""),
             song_label: Label::builder().ellipsized().bold().build(),

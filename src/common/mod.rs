@@ -4,7 +4,7 @@ use std::time::Duration;
 use adw::prelude::*;
 use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
 use adw::glib::timeout_add_local_once;
-use gtk::{Box, Image, Label, Orientation, ScrolledWindow};
+use gtk::{Box, Button, Image, Label, Orientation, ScrolledWindow};
 use gtk::builders::{BoxBuilder, LabelBuilder};
 
 pub mod util;
@@ -106,13 +106,24 @@ impl ImagePathBuf for Image {
     }
 }
 
-pub trait MonospaceLabel{
+pub trait MonospaceLabel {
     fn monospace(self) -> Self;
 }
 
 impl MonospaceLabel for Label {
     fn monospace(self) -> Self {
         self.add_css_class("monospace");
+        self
+    }
+}
+
+pub trait FlatButton {
+    fn flat(self) -> Button;
+}
+
+impl FlatButton for Button {
+    fn flat(self) -> Button {
+        self.add_css_class("flat");
         self
     }
 }
