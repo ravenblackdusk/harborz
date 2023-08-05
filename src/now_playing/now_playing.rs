@@ -130,13 +130,14 @@ impl NowPlaying {
             if minutes == 0 { 1 } else { (minutes.ilog10() + 1) as usize }
         }));
     }
-    fn update_duration(&self, other: bool) {
+    fn update_duration_and_position(&self, other: bool) {
         if self.bottom_duration.is_realized() != other {
             &self.bottom_duration
         } else {
             self.scale.set_range(0.0, self.duration as f64);
             &self.body_duration
         }.set_label(&format(self.duration));
+        self.update_position(other);
     }
     pub fn set_song_info(&mut self, song: &str, artist: &str, window_title: &WindowTitle) {
         self.song = String::from(song);
@@ -145,13 +146,12 @@ impl NowPlaying {
     }
     pub fn set_duration(&mut self) {
         self.duration = PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap_or(0);
-        self.update_duration(false);
+        self.update_duration_and_position(false);
     }
     pub fn update_other(&self, window_title: &WindowTitle, back_button: &Button, icon_name: &str,
         header_body: &gtk::Box, body: &gtk::Box) {
         self.update_image(true);
-        self.update_position(true);
-        self.update_duration(true);
+        self.update_duration_and_position(true);
         let (current_play_pause, other_play_pause) = if self.bottom_play_pause.is_realized() {
             (&self.bottom_play_pause, &self.body_play_pause)
         } else {
