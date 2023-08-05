@@ -4,6 +4,7 @@ use adw::prelude::*;
 use adw::WindowTitle;
 use gtk::{Button, CssProvider, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Orientation::Vertical;
+use gtk::PropagationPhase::Capture;
 use crate::body::Body;
 use crate::common::MonospaceLabel;
 use crate::now_playing::now_playing::NowPlaying;
@@ -25,7 +26,7 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     now_playing_and_progress.append(&now_playing_and_play_pause);
     let now_playing_box = gtk::Box::builder().build();
     now_playing_and_play_pause.append(&now_playing_box);
-    let skip_song_gesture = GestureSwipe::new();
+    let skip_song_gesture = GestureSwipe::builder().propagation_phase(Capture).build();
     now_playing_box.add_controller(skip_song_gesture.clone());
     now_playing_box.append(&now_playing.borrow().bottom_image);
     let song_selected_body_gesture = GestureLongPress::new();

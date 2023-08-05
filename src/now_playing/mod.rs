@@ -44,15 +44,18 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Button,
     header_body: &gtk::Box, body: &gtk::Box) -> Wrapper {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
-    let now_playing_body = body::create(now_playing.clone());
-    let (bottom_widget, skip_song_gesture, image_click) = bottom_widget::create(
+    let (now_playing_body, body_skip_song_gesture) = body::create(now_playing.clone());
+    let (bottom_widget, bottom_skip_song_gesture, image_click) = bottom_widget::create(
         now_playing.clone(), song_selected_body.clone(), window_title, scrolled_window, history.clone(), back_button,
     );
-    skip_song_gesture.connect_swipe(|_, velocity_x, velocity_y| {
-        if velocity_x.abs() > velocity_y.abs() {
-            PLAYBIN.go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
-        }
-    });
+    for skip_song_gesture in vec![body_skip_song_gesture, bottom_skip_song_gesture] {
+        skip_song_gesture.connect_swipe(|gesture, velocity_x, velocity_y| {
+            if velocity_x.abs() > velocity_y.abs() {
+                gesture.set_state(EventSequenceState::Claimed);
+                PLAYBIN.go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
+            }
+        });
+    }
     image_click.connect_released({
         let now_playing = now_playing.clone();
         let window_title = window_title.clone();
