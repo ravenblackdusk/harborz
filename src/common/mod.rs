@@ -1,9 +1,9 @@
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::time::Duration;
-use adw::prelude::*;
-use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale, Weight};
+use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale::Subscript, Weight::Bold};
 use adw::glib::timeout_add_local_once;
+use adw::prelude::*;
 use gtk::{Box, Button, Image, Label, Orientation, ScrolledWindow};
 use gtk::builders::{BoxBuilder, LabelBuilder};
 
@@ -40,7 +40,7 @@ pub trait BoldLabelBuilder {
 impl BoldLabelBuilder for LabelBuilder {
     fn bold(self) -> Self {
         let attr_list = AttrList::new();
-        attr_list.insert(AttrInt::new_weight(Weight::Bold));
+        attr_list.insert(AttrInt::new_weight(Bold));
         self.attributes(&attr_list)
     }
 }
@@ -52,7 +52,7 @@ pub trait SubscriptLabelBuilder {
 impl SubscriptLabelBuilder for LabelBuilder {
     fn subscript(self) -> LabelBuilder {
         let attr_list = AttrList::new();
-        attr_list.insert(AttrInt::new_font_scale(FontScale::Subscript));
+        attr_list.insert(AttrInt::new_font_scale(Subscript));
         self.attributes(&attr_list)
     }
 }
@@ -64,8 +64,8 @@ pub trait BoldSubscriptLabelBuilder {
 impl BoldSubscriptLabelBuilder for LabelBuilder {
     fn bold_subscript(self) -> LabelBuilder {
         let attr_list = AttrList::new();
-        attr_list.insert(AttrInt::new_font_scale(FontScale::Subscript));
-        attr_list.insert(AttrInt::new_weight(Weight::Bold));
+        attr_list.insert(AttrInt::new_font_scale(Subscript));
+        attr_list.insert(AttrInt::new_weight(Bold));
         self.attributes(&attr_list)
     }
 }
@@ -106,13 +106,13 @@ impl ImagePathBuf for Image {
     }
 }
 
-pub trait MonospaceLabel {
-    fn monospace(self) -> Self;
+pub trait NumericLabel {
+    fn numeric(self) -> Self;
 }
 
-impl MonospaceLabel for Label {
-    fn monospace(self) -> Self {
-        self.add_css_class("monospace");
+impl NumericLabel for Label {
+    fn numeric(self) -> Self {
+        self.add_css_class("numeric");
         self
     }
 }

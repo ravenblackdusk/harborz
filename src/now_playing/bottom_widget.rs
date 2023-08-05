@@ -2,11 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use adw::prelude::*;
 use adw::WindowTitle;
-use gtk::{Button, CssProvider, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk::{Button, EventSequenceState, GestureClick, GestureLongPress, GestureSwipe, Label, ScrolledWindow};
 use gtk::Orientation::Vertical;
 use gtk::PropagationPhase::Capture;
 use crate::body::Body;
-use crate::common::MonospaceLabel;
 use crate::now_playing::now_playing::NowPlaying;
 
 pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
@@ -14,11 +13,6 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Button)
     -> (gtk::Box, GestureSwipe, GestureClick) {
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("accent-bg").build();
-    let css_provider = CssProvider::new();
-    css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
-    #accent-progress progress { background-color: @accent_fg_color; }");
-    style_context_add_provider_for_display(&now_playing_and_progress.display(), &css_provider,
-        STYLE_PROVIDER_PRIORITY_APPLICATION);
     now_playing.borrow().progress_bar.add_css_class("osd");
     now_playing_and_progress.append(&now_playing.borrow().progress_bar);
     let now_playing_and_play_pause = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8)
@@ -62,7 +56,7 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     let time_box = gtk::Box::builder().spacing(4).margin_top(4).build();
     song_info.append(&time_box);
     time_box.append(&now_playing.borrow().bottom_position);
-    time_box.append(&Label::new(Some("/")).monospace());
+    time_box.append(&Label::new(Some("/")));
     time_box.append(&now_playing.borrow().bottom_duration);
     now_playing_and_play_pause.append(&now_playing.borrow().bottom_play_pause);
     (now_playing_and_progress, skip_song_gesture, image_click)

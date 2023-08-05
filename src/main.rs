@@ -7,7 +7,7 @@ use adw::prelude::*;
 use diesel::{delete, ExpressionMethods, insert_into, QueryDsl, RunQueryDsl, update};
 use diesel::migration::Result;
 use diesel_migrations::MigrationHarness;
-use gtk::{Button, MenuButton, Popover, ScrolledWindow};
+use gtk::{Button, CssProvider, MenuButton, Popover, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Align::Fill;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
@@ -46,6 +46,12 @@ fn main() -> Result<ExitCode> {
         let window = ApplicationWindow::builder().application(application).content(&header_body)
             .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
             .build();
+        let css_provider = CssProvider::new();
+        css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
+        #accent-progress progress { background-color: @accent_fg_color; } \
+        #small-slider slider { min-width: 16px; min-height: 16px; } trough { min-height: 4px }");
+        style_context_add_provider_for_display(&header_body.display(), &css_provider,
+            STYLE_PROVIDER_PRIORITY_APPLICATION);
         let window_title = WindowTitle::builder().build();
         let history: Rc<RefCell<Vec<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(Vec::new()));
         let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));

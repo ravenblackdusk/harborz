@@ -8,20 +8,20 @@ use crate::now_playing::now_playing::NowPlaying;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
 
 pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, GestureSwipe) {
-    let body = gtk::Box::builder().orientation(Vertical).margin_bottom(8).build();
+    let body = gtk::Box::builder().orientation(Vertical).margin_bottom(16).build();
     let image_and_song_info = gtk::Box::builder().orientation(Vertical).build();
     body.append(&image_and_song_info);
     image_and_song_info.append(&now_playing.borrow().body_image);
-    let song_info = gtk::Box::builder().orientation(Vertical).margin_start(8).margin_end(8).build();
+    let song_info = gtk::Box::builder().orientation(Vertical).spacing(4).margin_start(8).margin_end(8).build();
     image_and_song_info.append(&song_info);
     let skip_song_gesture = GestureSwipe::new();
     image_and_song_info.add_controller(skip_song_gesture.clone());
     song_info.append(&now_playing.borrow().body_song);
     song_info.append(&now_playing.borrow().body_artist);
-    let time_and_controls = gtk::Box::builder().orientation(Vertical).margin_start(8).margin_end(8).build();
+    let time_and_controls = gtk::Box::builder().orientation(Vertical).spacing(4).margin_start(8).margin_end(8).build();
     body.append(&time_and_controls);
     time_and_controls.append(&now_playing.borrow().scale);
-    let time = gtk::Box::builder().build();
+    let time = gtk::Box::builder().margin_start(11).margin_end(11).build();
     time_and_controls.append(&time);
     time.append(&now_playing.borrow().body_position);
     time.append(&now_playing.borrow().body_duration);
