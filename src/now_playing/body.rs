@@ -8,7 +8,7 @@ use crate::now_playing::now_playing::NowPlaying;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
 
 pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, GestureSwipe) {
-    let body = gtk::Box::builder().orientation(Vertical).build();
+    let body = gtk::Box::builder().orientation(Vertical).margin_bottom(8).build();
     let image_and_song_info = gtk::Box::builder().orientation(Vertical).build();
     body.append(&image_and_song_info);
     image_and_song_info.append(&now_playing.borrow().body_image);
@@ -25,7 +25,7 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (g
     time_and_controls.append(&time);
     time.append(&now_playing.borrow().body_position);
     time.append(&now_playing.borrow().body_duration);
-    let controls = gtk::Box::builder().margin_bottom(4).build();
+    let controls = gtk::Box::builder().build();
     time_and_controls.append(&controls);
     let skip_backward = Button::builder().hexpand(true).tooltip_text("Previous")
         .child(&Image::builder().icon_name("media-skip-backward").pixel_size(40).build()).build().flat();
