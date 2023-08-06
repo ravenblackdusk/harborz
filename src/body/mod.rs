@@ -12,7 +12,7 @@ use gtk::{Button, ColumnView, ColumnViewColumn, Image, Label, ListItem, NoSelect
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::common::{AdjustableScrolledWindow, ALBUM, BoldLabelBuilder, BoldSubscriptLabelBuilder, EllipsizedLabelBuilder, ImagePathBuf, SubscriptLabelBuilder};
+use crate::common::{AdjustableScrolledWindow, ALBUM, StyledLabelBuilder, ImagePathBuf};
 use crate::common::util::{format, or_none, or_none_static};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;

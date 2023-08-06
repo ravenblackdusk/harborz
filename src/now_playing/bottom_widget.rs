@@ -6,6 +6,7 @@ use gtk::{Button, EventSequenceState, GestureClick, GestureLongPress, GestureSwi
 use gtk::Orientation::Vertical;
 use gtk::PropagationPhase::Capture;
 use crate::body::Body;
+use crate::common::StyledLabelBuilder;
 use crate::now_playing::now_playing::NowPlaying;
 
 pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
@@ -56,7 +57,7 @@ pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     let time_box = gtk::Box::builder().spacing(4).margin_top(4).build();
     song_info.append(&time_box);
     time_box.append(&now_playing.borrow().bottom_position);
-    time_box.append(&Label::new(Some("/")));
+    time_box.append(&Label::builder().label("/").subscript().build());
     time_box.append(&now_playing.borrow().bottom_duration);
     now_playing_and_play_pause.append(&now_playing.borrow().bottom_play_pause);
     (now_playing_and_progress, skip_song_gesture, image_click)

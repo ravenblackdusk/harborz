@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::time::Duration;
-use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale::Subscript, Weight::Bold};
+use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale::Subscript, Weight, Weight::Bold};
 use adw::glib::timeout_add_local_once;
 use adw::prelude::*;
 use gtk::{Box, Button, Image, Label, Orientation, ScrolledWindow};
@@ -19,50 +19,36 @@ pub fn gtk_box(orientation: Orientation) -> Box {
     box_builder().orientation(orientation).build()
 }
 
-pub trait EllipsizedLabelBuilder {
+pub trait StyledLabelBuilder {
     fn ellipsized(self) -> Self;
     fn margin_ellipsized(self, i: i32) -> Self;
+    fn weight(self, weight: Weight) -> Self;
+    fn bold(self) -> Self;
+    fn subscript(self) -> Self;
+    fn bold_subscript(self) -> Self;
 }
 
-impl EllipsizedLabelBuilder for LabelBuilder {
+impl StyledLabelBuilder for LabelBuilder {
     fn ellipsized(self) -> Self {
         self.hexpand(true).xalign(0.0).max_width_chars(1).ellipsize(EllipsizeMode::End)
     }
     fn margin_ellipsized(self, margin: i32) -> Self {
         self.ellipsized().margin_start(margin).margin_end(margin)
     }
-}
-
-pub trait BoldLabelBuilder {
-    fn bold(self) -> Self;
-}
-
-impl BoldLabelBuilder for LabelBuilder {
-    fn bold(self) -> Self {
+    fn weight(self, weight: Weight) -> Self {
         let attr_list = AttrList::new();
-        attr_list.insert(AttrInt::new_weight(Bold));
+        attr_list.insert(AttrInt::new_weight(weight));
         self.attributes(&attr_list)
     }
-}
-
-pub trait SubscriptLabelBuilder {
-    fn subscript(self) -> LabelBuilder;
-}
-
-impl SubscriptLabelBuilder for LabelBuilder {
-    fn subscript(self) -> LabelBuilder {
+    fn bold(self) -> Self {
+        self.weight(Bold)
+    }
+    fn subscript(self) -> Self {
         let attr_list = AttrList::new();
         attr_list.insert(AttrInt::new_font_scale(Subscript));
         self.attributes(&attr_list)
     }
-}
-
-pub trait BoldSubscriptLabelBuilder {
-    fn bold_subscript(self) -> LabelBuilder;
-}
-
-impl BoldSubscriptLabelBuilder for LabelBuilder {
-    fn bold_subscript(self) -> LabelBuilder {
+    fn bold_subscript(self) -> Self {
         let attr_list = AttrList::new();
         attr_list.insert(AttrInt::new_font_scale(Subscript));
         attr_list.insert(AttrInt::new_weight(Bold));
@@ -106,13 +92,18 @@ impl ImagePathBuf for Image {
     }
 }
 
-pub trait NumericLabel {
+pub trait StyledLabel {
     fn numeric(self) -> Self;
+    fn with_css_class(self, css_class: &str) -> Self;
 }
 
-impl NumericLabel for Label {
+impl StyledLabel for Label {
     fn numeric(self) -> Self {
         self.add_css_class("numeric");
+        self
+    }
+    fn with_css_class(self, css_class: &str) -> Self {
+        self.add_css_class(css_class);
         self
     }
 }

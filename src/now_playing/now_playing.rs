@@ -6,7 +6,7 @@ use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
 use gtk::Align::{End, Start};
-use crate::common::{BoldLabelBuilder, EllipsizedLabelBuilder, FlatButton, ImagePathBuf, NumericLabel, SONG};
+use crate::common::{StyledLabelBuilder, FlatButton, ImagePathBuf, StyledLabel, SONG};
 use crate::common::util::{format, format_pad};
 use crate::now_playing::playbin::PLAYBIN;
 
@@ -73,10 +73,6 @@ impl NowPlaying {
     pub(in crate::now_playing) fn new() -> Self {
         let scale = Scale::builder().hexpand(true).name("small-slider").build();
         scale.set_range(0.0, 1.0);
-        let body_song = Label::builder().ellipsized().build();
-        body_song.add_css_class("title-3");
-        let body_artist = Label::builder().ellipsized().build();
-        body_artist.add_css_class("title-4");
         NowPlaying {
             cover: None,
             bottom_image: Image::builder().pixel_size(56).build(),
@@ -85,20 +81,20 @@ impl NowPlaying {
             duration: 0,
             progress_bar: ProgressBar::builder().name("accent-progress").build(),
             scale,
-            bottom_position: Label::builder().label(&format(0)).build().numeric(),
-            body_position: Label::builder().label(&format(0)).hexpand(true).halign(Start).build().numeric(),
-            bottom_duration: Label::new(Some(&format(0))).numeric(),
-            body_duration: Label::builder().label(&format(0)).hexpand(true).halign(End).build().numeric(),
+            bottom_position: Label::builder().label(&format(0)).subscript().build().numeric(),
+            body_position: Label::builder().label(&format(0)).hexpand(true).halign(Start).subscript().build().numeric(),
+            bottom_duration: Label::builder().label(&format(0)).subscript().build().numeric(),
+            body_duration: Label::builder().label(&format(0)).hexpand(true).halign(End).subscript().build().numeric(),
             bottom_play_pause: Self::flat_play(Button::builder()
-                .child(&Image::builder().pixel_size(40).build()).build()),
+                .child(&Image::builder().pixel_size(32).build()).build()),
             body_play_pause: Self::flat_play(Button::builder().hexpand(true)
                 .child(&Image::builder().pixel_size(40).build()).build()),
             song: String::from(""),
             artist: String::from(""),
             bottom_song: Label::builder().ellipsized().bold().build(),
-            body_song,
+            body_song: Label::builder().ellipsized().build().with_css_class("title-3"),
             bottom_artist: Label::builder().ellipsized().build(),
-            body_artist,
+            body_artist: Label::builder().ellipsized().build(),
         }
     }
     pub(in crate::now_playing) fn click_play_pause(&self) {

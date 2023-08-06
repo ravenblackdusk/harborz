@@ -3,7 +3,7 @@ use gtk::{Button, Label, prelude};
 use gtk::Orientation::{Horizontal, Vertical};
 use prelude::*;
 use crate::body::collection::model::Collection;
-use crate::common::{EllipsizedLabelBuilder, gtk_box};
+use crate::common::{StyledLabelBuilder, gtk_box};
 use crate::common::util::PathString;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
