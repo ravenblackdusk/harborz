@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Harborz
+Exec=<harborz git directory>/target/release/harborz
+Categories=GNOME;GTK;Player;Audio;
+Keywords=Music;Player
