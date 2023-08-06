@@ -64,13 +64,13 @@ fn main() -> Result<ExitCode> {
         let back_button = Button::builder().icon_name(BACK_ICON).tooltip_text("Home").visible(history_bodies.len() > 1)
             .build();
         header_bar.pack_start(&back_button);
-        let now_playing = now_playing::create(song_selected_body.clone(), &window_title, &scrolled_window,
-            history.clone(), &back_button, &header_body, &body);
-        body.append(&now_playing);
+        let (now_playing_body, wrapper, now_playing) = now_playing::create(song_selected_body.clone(), &window_title,
+            &scrolled_window, history.clone(), &back_button, &header_body, &body);
+        body.append(&wrapper);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
             .get_result::<BodyTable>(&mut get_connection()).ok().map(|body_table| {
             let body = Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(),
-                &now_playing, &back_button, &window);
+                &wrapper, &back_button, &window);
             body.scroll_adjustment.set(body_table.scroll_adjustment);
             Rc::new(body)
         });
@@ -96,12 +96,12 @@ fn main() -> Result<ExitCode> {
             }
         });
         for body_table in history_bodies {
-            Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(), &now_playing,
+            Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(), &wrapper,
                 &back_button, &window,
             ).put_to_history(body_table.scroll_adjustment, history.clone());
         }
         if empty_history {
-            Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &now_playing,
+            Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &wrapper,
                 &Some(back_button.clone()))
             ).set(&window_title, &scrolled_window, history.clone(), &None);
         } else if let Some((body, _)) = history.borrow().last() {
@@ -109,6 +109,9 @@ fn main() -> Result<ExitCode> {
             let Body { widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
             scrolled_window.set_child(Some((**widget).as_ref()));
             scrolled_window.adjust(&body_scroll_adjustment);
+        }
+        if config.now_playing_body_realized == 1 {
+            now_playing.borrow().realize_body(&window_title, &back_button, &header_body, &now_playing_body);
         }
         window.connect_close_request({
             let history = history.clone();

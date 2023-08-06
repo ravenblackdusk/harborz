@@ -20,7 +20,7 @@ use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::BACK_ICON;
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
-use crate::config::Config;
+use crate::config::{Config, update_now_playing_body_realized};
 use crate::db::get_connection;
 use crate::now_playing::mpris::mpris_player;
 use crate::now_playing::now_playing::{NowPlaying, Playable};
@@ -42,7 +42,7 @@ mod body;
 
 pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &WindowTitle,
     scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Button,
-    header_body: &gtk::Box, body: &gtk::Box) -> Wrapper {
+    header_body: &gtk::Box, body: &gtk::Box) -> (gtk::Box, Wrapper, Rc<RefCell<NowPlaying>>) {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
     let (now_playing_body, body_skip_song_gesture) = body::create(now_playing.clone());
     let (bottom_widget, bottom_skip_song_gesture, image_click) = bottom_widget::create(
@@ -64,7 +64,8 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
         let now_playing_body = now_playing_body.clone();
         move |gesture, _, _, _| {
             gesture.set_state(EventSequenceState::Claimed);
-            now_playing.borrow().update_other(&window_title, &back_button, "go-down", &header_body, &now_playing_body);
+            now_playing.borrow().realize_body(&window_title, &back_button, &header_body, &now_playing_body);
+            update_now_playing_body_realized(true);
         }
     });
     let wrapper = Wrapper::new(&bottom_widget);
@@ -77,6 +78,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
         let scrolled_window = scrolled_window.clone();
         let wrapper = wrapper.clone();
         move |back_button| {
+            update_now_playing_body_realized(false);
             if history.borrow().is_empty() {
                 back_button.set_visible(false);
                 Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &wrapper,
@@ -239,5 +241,5 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
             Continue(true)
         }
     }).unwrap();
-    wrapper
+    (now_playing_body, wrapper, now_playing)
 }

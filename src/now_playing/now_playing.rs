@@ -166,6 +166,10 @@ impl NowPlaying {
         header_body.remove(&header_body.last_child().unwrap());
         header_body.append(body);
     }
+    pub fn realize_body(&self, window_title: &WindowTitle, back_button: &Button, header_body: &gtk::Box,
+        body: &gtk::Box) {
+        self.update_other(window_title, back_button, "go-down", header_body, body);
+    }
     pub fn set_album_image(&mut self, cover: PathBuf) -> Option<String> {
         let result = if cover.exists() { cover.to_str().map(|it| { format!("file:{}", it) }) } else { None };
         self.cover = Some(cover);

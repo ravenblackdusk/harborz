@@ -20,12 +20,13 @@ diesel::table! {
 }
 
 diesel::table! {
-    config (current_song_id) {
+    config (current_song_position) {
+        current_song_position -> BigInt,
         current_song_id -> Nullable<Integer>,
         window_width -> Integer,
         window_height -> Integer,
         maximized -> Integer,
-        current_song_position -> BigInt,
+        now_playing_body_realized -> Integer,
     }
 }
 
