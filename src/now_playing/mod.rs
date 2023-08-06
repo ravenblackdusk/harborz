@@ -67,6 +67,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
             now_playing.borrow().update_other(&window_title, &back_button, "go-down", &header_body, &now_playing_body);
         }
     });
+    let wrapper = Wrapper::new(&bottom_widget);
     back_button.connect_clicked({
         let history = history.clone();
         let now_playing = now_playing.clone();
@@ -74,19 +75,27 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
         let body = body.clone();
         let window_title = window_title.clone();
         let scrolled_window = scrolled_window.clone();
+        let wrapper = wrapper.clone();
         move |back_button| {
-            let mut history = history.borrow_mut();
-            if back_button.icon_name().unwrap() == BACK_ICON {
-                history.pop();
+            if history.borrow().is_empty() {
+                back_button.set_visible(false);
+                Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &wrapper,
+                    &Some(back_button.clone()))
+                ).set(&window_title, &scrolled_window, history.clone(), &None);
             } else {
-                now_playing.borrow().update_other(&window_title, &back_button, BACK_ICON, &header_body, &body);
-            }
-            back_button.set_visible(history.len() > 1);
-            if let Some((body, adjust_scroll)) = history.last() {
-                body.set_window_title(&window_title);
-                let Body { widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-                scrolled_window.set_child(Some((**widget).as_ref()));
-                if *adjust_scroll { scrolled_window.adjust(&body_scroll_adjustment); }
+                let mut history = history.borrow_mut();
+                if back_button.icon_name().unwrap() == BACK_ICON {
+                    history.pop();
+                } else {
+                    now_playing.borrow().update_other(&window_title, &back_button, BACK_ICON, &header_body, &body);
+                }
+                back_button.set_visible(history.len() > 1);
+                if let Some((body, adjust_scroll)) = history.last() {
+                    body.set_window_title(&window_title);
+                    let Body { widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
+                    scrolled_window.set_child(Some((**widget).as_ref()));
+                    if *adjust_scroll { scrolled_window.adjust(&body_scroll_adjustment); }
+                }
             }
         }
     });
@@ -136,7 +145,6 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     });
     let tracking_position = Rc::new(Cell::new(false));
     let once = Once::new();
-    let wrapper = Wrapper::new(&bottom_widget);
     wrapper.connect_local(SONG_SELECTED, true, {
         let now_playing = now_playing.clone();
         move |params| {

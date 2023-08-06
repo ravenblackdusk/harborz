@@ -89,7 +89,7 @@ fn main() -> Result<ExitCode> {
             let back_button = back_button.clone();
             move |_| {
                 if history.borrow().last().unwrap().0.body_type != BodyType::Collections {
-                    Rc::new(Body::collections(&window))
+                    Rc::new(Body::collections(&window, history.clone()))
                         .set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
                 }
                 menu_button.popdown();

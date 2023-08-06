@@ -148,7 +148,7 @@ impl Body {
             BodyType::Songs => {
                 Body::songs(body_table.query1.clone(), body_table.query2.clone().map(Rc::new), &now_playing)
             }
-            BodyType::Collections => { Body::collections(&window) }
+            BodyType::Collections => { Body::collections(&window, history) }
         }
     }
     pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) {
@@ -167,7 +167,7 @@ impl Body {
         scrolled_window.set_child(Some((*self.widget).as_ref()));
         history.push((self, false));
     }
-    pub fn collections(window: &ApplicationWindow) -> Self {
+    pub fn collections(window: &ApplicationWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) -> Self {
         Self {
             title: Rc::new(String::from("Harborz")),
             subtitle: Rc::new(String::from("Collection")),
@@ -175,7 +175,7 @@ impl Body {
             query1: None,
             query2: None,
             scroll_adjustment: Cell::new(None),
-            widget: Box::new(add_collection_box(&window)),
+            widget: Box::new(add_collection_box(&window, history)),
         }
     }
     pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
