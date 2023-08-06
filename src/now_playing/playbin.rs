@@ -82,7 +82,7 @@ impl Playbin for Pipeline {
                     let playing = self.current_state() == Playing;
                     if now { self.set_state(Null).unwrap(); }
                     self.set_uri(&(delta_song, delta_collection).path());
-                    if now && playing { self.set_state(Playing).unwrap(); }
+                    if now { self.set_state(if playing { Playing } else { Paused }).unwrap(); }
                 }
             }
             anyhow::Ok(())
