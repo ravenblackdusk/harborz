@@ -50,7 +50,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     );
     for skip_song_gesture in vec![body_skip_song_gesture, bottom_skip_song_gesture] {
         skip_song_gesture.connect_swipe(|gesture, velocity_x, velocity_y| {
-            if velocity_x.abs() > velocity_y.abs() {
+            if velocity_x.abs() * 0.1 > velocity_y.abs() {
                 gesture.set_state(EventSequenceState::Claimed);
                 PLAYBIN.go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
             }

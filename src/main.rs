@@ -68,10 +68,12 @@ fn main() -> Result<ExitCode> {
             &scrolled_window, history.clone(), &back_button, &header_body, &body);
         body.append(&wrapper);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
-            .get_result::<BodyTable>(&mut get_connection()).ok().map(|body_table| {
-            let body = Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(),
-                &wrapper, &back_button, &window);
-            body.scroll_adjustment.set(body_table.scroll_adjustment);
+            .get_result::<BodyTable>(&mut get_connection()).ok().map(|BodyTable {
+            body_type: body_body_type, query1: body_query1, query2: body_query2, scroll_adjustment: body_scroll_adjustment, ..
+        }| {
+            let body = Body::from_body_table(body_body_type, body_query1, body_query2, &window_title, &scrolled_window,
+                history.clone(), &wrapper, &back_button, &window);
+            body.scroll_adjustment.set(body_scroll_adjustment);
             Rc::new(body)
         });
         let menu = gtk_box(Vertical);
@@ -95,10 +97,12 @@ fn main() -> Result<ExitCode> {
                 menu_button.popdown();
             }
         });
-        for body_table in history_bodies {
-            Body::from_body_table(&body_table, &window_title, &scrolled_window, history.clone(), &wrapper,
-                &back_button, &window,
-            ).put_to_history(body_table.scroll_adjustment, history.clone());
+        for BodyTable {
+            body_type: body_body_type, query1: body_query1, query2: body_query2, scroll_adjustment: body_scroll_adjustment, ..
+        } in history_bodies {
+            Body::from_body_table(body_body_type, body_query1, body_query2, &window_title, &scrolled_window,
+                history.clone(), &wrapper, &back_button, &window,
+            ).put_to_history(body_scroll_adjustment, history.clone());
         }
         if empty_history {
             Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &wrapper,
