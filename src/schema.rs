@@ -38,11 +38,13 @@ diesel::table! {
         title -> Nullable<Text>,
         artist -> Nullable<Text>,
         album -> Nullable<Text>,
-        datetime -> Nullable<BigInt>,
+        year -> Nullable<Integer>,
         genre -> Nullable<Text>,
         track_number -> Nullable<Integer>,
+        album_volume -> Nullable<Integer>,
         album_artist -> Nullable<Text>,
         duration -> BigInt,
+        lyrics -> Nullable<Text>,
     }
 }
 

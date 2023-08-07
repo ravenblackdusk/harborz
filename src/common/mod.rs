@@ -79,8 +79,8 @@ pub struct IconType {
     icon_name: &'static str,
 }
 
-pub const SONG: IconType = IconType { icon_name: "audio-x-generic" };
-pub const ALBUM: IconType = IconType { icon_name: "folder-music" };
+pub const SONG_ICON: IconType = IconType { icon_name: "audio-x-generic" };
+pub const ALBUM_ICON: IconType = IconType { icon_name: "folder-music" };
 
 pub trait ImagePathBuf {
     fn set_cover(&self, cover: &PathBuf, icon_type: IconType) -> &Self;

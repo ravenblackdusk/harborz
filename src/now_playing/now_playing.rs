@@ -6,7 +6,7 @@ use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
 use gtk::Align::{End, Start};
-use crate::common::{StyledLabelBuilder, FlatButton, ImagePathBuf, StyledLabel, SONG};
+use crate::common::{FlatButton, ImagePathBuf, SONG_ICON, StyledLabel, StyledLabelBuilder};
 use crate::common::util::{format, format_pad};
 use crate::now_playing::playbin::PLAYBIN;
 
@@ -115,7 +115,7 @@ impl NowPlaying {
     fn update_image(&self, other: bool) {
         if let Some(cover) = &self.cover {
             if self.body_image.is_realized() != other { &self.body_image } else { &self.bottom_image }
-                .set_cover(cover, SONG);
+                .set_cover(cover, SONG_ICON);
         }
     }
     fn update_position(&self, other: bool) {

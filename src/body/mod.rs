@@ -4,20 +4,20 @@ use std::rc::Rc;
 use adw::{ApplicationWindow, WindowTitle};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-use diesel::dsl::{count_distinct, count_star, min};
-use gtk::{Button, GestureClick, Grid, Image, Label, ScrolledWindow, Separator, Widget};
+use diesel::dsl::{count_distinct, count_star, max, min};
+use gtk::{Button, CenterBox, GestureClick, Grid, Image, Label, ScrolledWindow, Separator, Widget};
 use gtk::Orientation::Vertical;
 use crate::body::collection::add_collection_box;
-use crate::common::{AdjustableScrolledWindow, ALBUM, StyledLabelBuilder, ImagePathBuf};
+use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
 use crate::common::constant::ACCENT_BG;
-use crate::common::util::{format, or_none_static};
+use crate::common::util::{format, or_none_static, Plural};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 use crate::schema::config::dsl::config;
-use crate::schema::songs::{album, artist, path as song_path};
+use crate::schema::songs::{album, artist, path as song_path, year};
 use crate::schema::songs::dsl::songs;
 use crate::song::{get_current_album, join_path, WithCover};
 
@@ -98,6 +98,8 @@ impl Castable for Option<Widget> {
 }
 
 const NAME: &'static str = "name";
+const ALBUM: &'static str = "Album";
+const SONG: &'static str = "Song";
 
 impl Body {
     pub fn set_window_title(&self, window_title: &WindowTitle) {
@@ -157,7 +159,7 @@ impl Body {
             query1: None,
             query2: None,
             title: Rc::new(String::from("Harborz")),
-            subtitle: Rc::new(format!("{} Artists", artists.len())),
+            subtitle: Rc::new(artists.len().number_plural("Artist")),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 let artists_box = gtk::Box::builder().orientation(Vertical).build();
@@ -203,11 +205,11 @@ impl Body {
                     let album_count_box = gtk::Box::builder().spacing(4).build();
                     count_box.append(&album_count_box);
                     album_count_box.append(&Label::builder().label(&album_count.to_string()).subscript().build());
-                    album_count_box.append(&Label::builder().label("Albums").subscript().build());
+                    album_count_box.append(&Label::builder().label(album_count.plural(ALBUM)).subscript().build());
                     let song_count_box = gtk::Box::builder().spacing(4).build();
                     count_box.append(&song_count_box);
                     song_count_box.append(&Label::builder().label(&song_count.to_string()).subscript().build());
-                    song_count_box.append(&Label::builder().label("Songs").subscript().build());
+                    song_count_box.append(&Label::builder().label(song_count.plural(SONG)).subscript().build());
                     artist_row.append(&next_icon());
                 }
                 artists_box
@@ -216,19 +218,24 @@ impl Body {
     }
     pub fn albums(artist_string: Option<Rc<String>>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
         history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper) -> Self {
-        let albums = songs.inner_join(collections).filter(artist.eq(artist_string.as_deref())).group_by(album)
-            .select((album, count_star(), min(path), min(song_path)))
-            .get_results::<(Option<String>, i64, Option<String>, Option<String>)>(&mut get_connection()).unwrap();
+        let statement = songs.inner_join(collections).group_by(album).order_by(min(year).desc())
+            .select((album, count_star(), min(path), min(song_path), min(year), max(year))).into_boxed();
+        let albums = if let Some(artist_string) = artist_string.clone() {
+            statement.filter(artist.eq(artist_string.deref().to_owned()))
+        } else {
+            statement.filter(artist.is_null())
+        }.get_results::<(Option<String>, i64, Option<String>, Option<String>, Option<i32>, Option<i32>)>(&mut get_connection())
+            .unwrap();
         Self {
             body_type: BodyType::Albums,
             query1: artist_string.clone(),
             query2: None,
             title: or_none_static(artist_string.clone()),
-            subtitle: Rc::new(format!("{} Albums", albums.len())),
+            subtitle: Rc::new(albums.len().number_plural(ALBUM)),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 let albums_box = gtk::Box::builder().orientation(Vertical).build();
-                for (album_string, count, collection_path, album_song_path) in albums {
+                for (album_string, count, collection_path, album_song_path, min_year, max_year) in albums {
                     let album_string = album_string.map(Rc::new);
                     let window_title = window_title.clone();
                     let scrolled_window = scrolled_window.clone();
@@ -237,8 +244,9 @@ impl Body {
                     let album_row = gtk::Box::builder().spacing(8).build();
                     albums_box.append(&album_row);
                     albums_box.append(&Separator::builder().build());
-                    album_row.append(Image::builder().pixel_size(38).margin_start(8).build()
-                        .set_cover(&join_path(&collection_path.unwrap(), &album_song_path.unwrap()).cover(), ALBUM));
+                    album_row.append(Image::builder().pixel_size(38).margin_start(8).build().set_cover(
+                        &join_path(&collection_path.unwrap(), &album_song_path.unwrap()).cover(), ALBUM_ICON)
+                    );
                     let gesture_click = GestureClick::new();
                     gesture_click.connect_pressed({
                         let album_row = album_row.clone();
@@ -265,10 +273,22 @@ impl Body {
                     album_row.append(&album_box);
                     album_box.append(&Label::builder().label(&*or_none_static(album_string)).margin_ellipsized(4).bold()
                         .build());
+                    let year_builder = Label::builder().margin_start(4).subscript();
                     let count_box = gtk::Box::builder().spacing(4).build();
-                    album_box.append(&count_box);
-                    count_box.append(&Label::builder().label(&count.to_string()).margin_start(4).subscript().build());
-                    count_box.append(&Label::builder().label("Songs").subscript().build());
+                    count_box.append(&Label::builder().label(&count.to_string()).subscript().build());
+                    count_box.append(&Label::builder().label(count.plural(SONG)).subscript().build());
+                    let info_box = CenterBox::builder().start_widget(
+                        &if let Some(min_year) = min_year {
+                            year_builder.label(&if min_year == max_year.unwrap() {
+                                min_year.to_string()
+                            } else {
+                                format!("{} to {}", min_year, max_year.unwrap())
+                            })
+                        } else {
+                            year_builder
+                        }.build()
+                    ).end_widget(&count_box).build();
+                    album_box.append(&info_box);
                     album_row.append(&next_icon());
                 }
                 albums_box
@@ -282,7 +302,7 @@ impl Body {
             query1: album_string.clone(),
             query2: artist_string,
             title: or_none_static(album_string),
-            subtitle: Rc::new(format!("{} Songs", current_album.len())),
+            subtitle: Rc::new(current_album.len().number_plural(SONG)),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();

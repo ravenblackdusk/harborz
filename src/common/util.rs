@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
@@ -28,4 +29,23 @@ pub fn or_none(string: &Option<String>) -> &str {
 
 pub fn or_none_static(string: Option<Rc<String>>) -> Rc<String> {
     string.unwrap_or(Rc::new(String::from(NONE)))
+}
+
+pub trait Plural: Display {
+    fn plural(&self, string: &str) -> String;
+    fn number_plural(&self, string: &str) -> String {
+        format!("{} {}", self, self.plural(string))
+    }
+}
+
+impl Plural for i64 {
+    fn plural(&self, string: &str) -> String {
+        (*self as usize).plural(string)
+    }
+}
+
+impl Plural for usize {
+    fn plural(&self, string: &str) -> String {
+        format!("{}{}", string, if *self == 1 { "" } else { "s" })
+    }
 }
