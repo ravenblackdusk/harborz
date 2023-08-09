@@ -3,7 +3,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{Button, GestureSwipe, Image};
 use gtk::Orientation::Vertical;
-use crate::common::FlatButton;
+use crate::common::StyledWidget;
 use crate::now_playing::now_playing::NowPlaying;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
 

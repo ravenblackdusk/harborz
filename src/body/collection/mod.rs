@@ -1,11 +1,9 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, TryRecvError};
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use TryRecvError::{Disconnected, Empty};
-use adw::ApplicationWindow;
 use adw::gio::{Cancellable, File};
 use adw::glib::{ControlFlow, timeout_add_local};
 use adw::prelude::*;
@@ -14,10 +12,10 @@ use diesel::prelude::*;
 use diesel::result::Error;
 use gtk::{Button, FileDialog, ProgressBar};
 use gtk::Orientation::Vertical;
-use crate::body::Body;
 use crate::body::collection::model::Collection;
 use crate::body::collection::r#box::CollectionBox;
-use crate::common::gtk_box;
+use crate::common::{gtk_box, StyledWidget};
+use crate::common::state::State;
 use crate::db::get_connection;
 use crate::schema::bodies::dsl::bodies;
 use crate::schema::collections::{modified, path};
@@ -26,26 +24,24 @@ use crate::song::{import_songs, ImportProgress};
 
 mod r#box;
 pub mod model;
+pub mod button;
 
-pub(in crate::body) fn add_collection_box(window: &ApplicationWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>)
-    -> gtk::Box {
+pub(in crate::body) fn add_collection_box(state: Rc<State>) -> gtk::Box {
     let add_collection_box = gtk_box(Vertical);
-    let collection_box: gtk::Box = CollectionBox::new(history.clone());
+    let collection_box: gtk::Box = CollectionBox::new(state.history.clone());
     add_collection_box.append(&collection_box);
-    let browse_button = Button::builder().label("Browse").build();
-    browse_button.add_css_class("suggested-action");
+    let browse_button = Button::builder().label("Browse").build().suggested_action();
     add_collection_box.append(&browse_button);
     browse_button.connect_clicked({
-        let window = window.clone();
         move |_| {
             FileDialog::builder().title("Collection directories").accept_label("Choose").build()
-                .select_multiple_folders(Some(&window), Cancellable::NONE, {
+                .select_multiple_folders(Some(&state.window), Cancellable::NONE, {
                     let collection_box = collection_box.clone();
-                    let history = history.clone();
+                    let state = state.clone();
                     move |files| {
                         if let Ok(Some(files)) = files {
                             delete(bodies).execute(&mut get_connection()).unwrap();
-                            history.borrow_mut().clear();
+                            state.history.borrow_mut().clear();
                             let (sender, receiver) = channel::<ImportProgress>();
                             let mut last_id: Option<i32> = None;
                             let mut progress_bar_map = HashMap::new();
@@ -70,7 +66,7 @@ pub(in crate::body) fn add_collection_box(window: &ApplicationWindow, history: R
                                                 }
                                                 ImportProgress::CollectionEnd(id, collection_path) => {
                                                     collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
-                                                    collection_box.add(id, &collection_path, history.clone());
+                                                    collection_box.add(id, &collection_path, state.history.clone());
                                                     true
                                                 }
                                             }

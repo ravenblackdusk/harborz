@@ -1,23 +1,24 @@
 use std::cell::{Cell, RefCell};
+use std::mem::forget;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
 use adw::glib::Propagation;
 use adw::prelude::*;
-use adw::WindowTitle;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
-use gstreamer::glib::timeout_add_local;
+use gstreamer::glib::{ControlFlow::*, timeout_add_local};
 use gstreamer::MessageView::{AsyncDone, DurationChanged, StateChanged, StreamStart};
-use gstreamer::prelude::{Continue, ElementExt, ElementExtManual, GstObjectExt, ObjectExt as GstreamerObject};
+use gstreamer::prelude::{ElementExt, ElementExtManual, GstObjectExt, ObjectExt as GstreamerObject};
 use gstreamer::State::{Null, Paused, Playing};
-use gtk::{Button, EventSequenceState, ScrolledWindow, ScrollType};
+use gtk::{EventSequenceState, ScrollType};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use crate::body::Body;
 use crate::body::collection::model::Collection;
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::BACK_ICON;
+use crate::common::state::State;
 use crate::common::util::or_none;
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::{Config, update_now_playing_body_realized};
@@ -40,14 +41,12 @@ mod now_playing;
 mod bottom_widget;
 mod body;
 
-pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &WindowTitle,
-    scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Button,
-    header_body: &gtk::Box, body: &gtk::Box) -> (gtk::Box, Wrapper, Rc<RefCell<NowPlaying>>) {
+pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State>, body: &gtk::Box)
+    -> (gtk::Box, Wrapper, Rc<RefCell<NowPlaying>>) {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
     let (now_playing_body, body_skip_song_gesture) = body::create(now_playing.clone());
-    let (bottom_widget, bottom_skip_song_gesture, image_click) = bottom_widget::create(
-        now_playing.clone(), song_selected_body.clone(), window_title, scrolled_window, history.clone(), back_button,
-    );
+    let (bottom_widget, bottom_skip_song_gesture, image_click)
+        = bottom_widget::create(now_playing.clone(), song_selected_body.clone(), state.clone());
     for skip_song_gesture in vec![body_skip_song_gesture, bottom_skip_song_gesture] {
         skip_song_gesture.connect_swipe(|gesture, velocity_x, velocity_y| {
             if velocity_x.abs() * 0.1 > velocity_y.abs() {
@@ -58,50 +57,41 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     }
     image_click.connect_released({
         let now_playing = now_playing.clone();
-        let window_title = window_title.clone();
-        let back_button = back_button.clone();
-        let header_body = header_body.clone();
+        let state = state.clone();
         let now_playing_body = now_playing_body.clone();
         move |gesture, _, _, _| {
             gesture.set_state(EventSequenceState::Claimed);
-            now_playing.borrow().realize_body(&window_title, &back_button, &header_body, &now_playing_body);
+            now_playing.borrow().realize_body(state.clone(), &now_playing_body);
             update_now_playing_body_realized(true);
         }
     });
     let wrapper = Wrapper::new(&bottom_widget);
-    back_button.connect_clicked({
-        let history = history.clone();
+    state.back_button.connect_clicked({
         let now_playing = now_playing.clone();
-        let header_body = header_body.clone();
+        let state = state.clone();
         let body = body.clone();
-        let window_title = window_title.clone();
-        let scrolled_window = scrolled_window.clone();
         let wrapper = wrapper.clone();
         move |back_button| {
-            update_now_playing_body_realized(false);
-            if history.borrow().is_empty() {
-                back_button.set_visible(false);
-                Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &wrapper,
-                    &Some(back_button.clone()))
-                ).set(&window_title, &scrolled_window, history.clone(), &None);
+            if state.history.borrow().is_empty() {
+                Rc::new(Body::artists(state.clone(), &wrapper)).set_with_history(state.clone());
             } else {
-                let mut history = history.borrow_mut();
+                let mut history = state.history.borrow_mut();
                 if back_button.icon_name().unwrap() == BACK_ICON {
                     history.pop();
                 } else {
-                    now_playing.borrow().update_other(&window_title, &back_button, BACK_ICON, &header_body, &body);
+                    update_now_playing_body_realized(false);
+                    now_playing.borrow().update_other(state.clone(), BACK_ICON, &body);
                 }
-                back_button.set_visible(history.len() > 1);
                 if let Some((body, adjust_scroll)) = history.last() {
-                    body.set_window_title(&window_title);
-                    let Body { widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-                    scrolled_window.set_child(Some((**widget).as_ref()));
-                    if *adjust_scroll { scrolled_window.adjust(&body_scroll_adjustment); }
+                    body.clone().set(state.clone());
+                    let Body { scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
+                    if *adjust_scroll { state.scrolled_window.adjust(&body_scroll_adjustment); }
                 }
             }
         }
     });
-    for play_pause in vec![now_playing.borrow().bottom_play_pause.clone(), now_playing.borrow().body_play_pause.clone()] {
+    for play_pause in vec![now_playing.borrow().bottom_play_pause.clone(),
+        now_playing.borrow().body_play_pause.clone()] {
         play_pause.connect_clicked(|play_pause| {
             if PLAYBIN.current_state() == Playing {
                 PLAYBIN.set_state(Paused).unwrap();
@@ -149,6 +139,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
     let once = Once::new();
     wrapper.connect_local(SONG_SELECTED, true, {
         let now_playing = now_playing.clone();
+        let state = state.clone();
         move |params| {
             if let [_, current_song_path, collection_path] = &params {
                 let playing = PLAYBIN.current_state() == Playing;
@@ -160,14 +151,14 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                 } else {
                     now_playing.borrow().click_play_pause();
                 }
-                *song_selected_body.borrow_mut() = history.borrow().last().map(|(body, _)| { body }).cloned();
+                *song_selected_body.borrow_mut() = state.history.borrow().last().map(|(body, _)| { body }).cloned();
             }
             None
         }
     });
-    PLAYBIN.bus().unwrap().add_watch_local({
+    forget(PLAYBIN.bus().unwrap().add_watch_local({
         let now_playing = now_playing.clone();
-        let window_title = window_title.clone();
+        let state = state.clone();
         let wrapper = wrapper.clone();
         move |_, message| {
             if message.src().map(|it| { it.name().starts_with("playbin3") }).unwrap_or(false) {
@@ -186,7 +177,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                                             }
                                             tracking_position.set(PLAYBIN.current_state() == Playing
                                                 || PLAYBIN.pending_state() == Playing);
-                                            Continue(tracking_position.get())
+                                            if tracking_position.get() { Continue } else { Break }
                                         }
                                     });
                                     tracking_position.set(true);
@@ -215,7 +206,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                                 .get_result::<(Collection, Song)>(connection)?;
                             update(config).set(current_song_id.eq(song.id)).execute(connection)?;
                             let title = song.title_str().to_owned();
-                            now_playing.borrow_mut().set_song_info(&title, or_none(&song.artist), &window_title);
+                            now_playing.borrow_mut().set_song_info(&title, or_none(&song.artist), &state.window_title);
                             let cover = (&song, &collection).path().cover();
                             let art_url = now_playing.borrow_mut().set_album_image(cover);
                             wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
@@ -238,8 +229,8 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, window_title: &
                     _ => {}
                 }
             }
-            Continue(true)
+            Continue
         }
-    }).unwrap();
+    }).unwrap());
     (now_playing_body, wrapper, now_playing)
 }

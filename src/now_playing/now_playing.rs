@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Duration;
 use adw::prelude::*;
 use adw::WindowTitle;
@@ -6,7 +7,8 @@ use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
 use gtk::Align::{End, Start};
-use crate::common::{FlatButton, ImagePathBuf, SONG_ICON, StyledLabel, StyledLabelBuilder};
+use crate::common::{ImagePathBuf, SONG_ICON, StyledLabelBuilder, StyledWidget};
+use crate::common::state::State;
 use crate::common::util::{format, format_pad};
 use crate::now_playing::playbin::PLAYBIN;
 
@@ -148,8 +150,7 @@ impl NowPlaying {
         self.duration = PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap_or(0);
         self.update_duration_and_position(false);
     }
-    pub fn update_other(&self, window_title: &WindowTitle, back_button: &Button, icon_name: &str,
-        header_body: &gtk::Box, body: &gtk::Box) {
+    pub fn update_other(&self, state: Rc<State>, icon_name: &str, body: &gtk::Box) {
         self.update_image(true);
         self.update_duration_and_position(true);
         let (current_play_pause, other_play_pause) = if self.bottom_play_pause.is_realized() {
@@ -160,15 +161,14 @@ impl NowPlaying {
         if let Some(tooltip) = current_play_pause.tooltip_text() {
             other_play_pause.change_state(if tooltip.as_str() == "Play" { PLAY } else { PAUSE });
         }
-        self.update_song_info(true, window_title);
-        back_button.set_visible(true);
-        back_button.set_icon_name(icon_name);
-        header_body.remove(&header_body.last_child().unwrap());
-        header_body.append(body);
+        self.update_song_info(true, &state.window_title);
+        state.back_button.set_visible(true);
+        state.back_button.set_icon_name(icon_name);
+        state.header_body.remove(&state.header_body.last_child().unwrap());
+        state.header_body.append(body);
     }
-    pub fn realize_body(&self, window_title: &WindowTitle, back_button: &Button, header_body: &gtk::Box,
-        body: &gtk::Box) {
-        self.update_other(window_title, back_button, "go-down", header_body, body);
+    pub fn realize_body(&self, state: Rc<State>, body: &gtk::Box) {
+        self.update_other(state, "go-down", body);
     }
     pub fn set_album_image(&mut self, cover: PathBuf) -> Option<String> {
         let result = if cover.exists() { cover.to_str().map(|it| { format!("file:{}", it) }) } else { None };

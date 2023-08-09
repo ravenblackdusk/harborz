@@ -12,10 +12,11 @@ use gtk::Align::Fill;
 use gtk::Orientation::Vertical;
 use db::MIGRATIONS;
 use NavigationType::History;
-use crate::body::{Body, BodyTable, BodyType, NavigationType};
+use crate::body::{Body, BodyTable, NavigationType};
 use crate::body::NavigationType::SongSelected;
-use crate::common::{AdjustableScrolledWindow, gtk_box};
+use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::{APP_ID, BACK_ICON};
+use crate::common::state::State;
 use crate::config::Config;
 use crate::db::get_connection;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
@@ -64,62 +65,46 @@ fn main() -> Result<ExitCode> {
         let back_button = Button::builder().icon_name(BACK_ICON).tooltip_text("Home").visible(history_bodies.len() > 1)
             .build();
         header_bar.pack_start(&back_button);
-        let (now_playing_body, wrapper, now_playing) = now_playing::create(song_selected_body.clone(), &window_title,
-            &scrolled_window, history.clone(), &back_button, &header_body, &body);
+        let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
+            .popover(&Popover::new()).build();
+        header_bar.pack_end(&menu_button);
+        let state = Rc::new(State {
+            window,
+            header_body,
+            header_bar,
+            back_button,
+            window_title,
+            menu_button,
+            scrolled_window,
+            history,
+        });
+        let (now_playing_body, wrapper, now_playing)
+            = now_playing::create(song_selected_body.clone(), state.clone(), &body);
         body.append(&wrapper);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
             .get_result::<BodyTable>(&mut get_connection()).ok().map(|BodyTable {
             body_type: body_body_type, query1: body_query1, query2: body_query2, scroll_adjustment: body_scroll_adjustment, ..
         }| {
-            let body = Body::from_body_table(body_body_type, body_query1, body_query2, &window_title, &scrolled_window,
-                history.clone(), &wrapper, &back_button, &window);
+            let body = Body::from_body_table(body_body_type, body_query1, body_query2, state.clone(), &wrapper);
             body.scroll_adjustment.set(body_scroll_adjustment);
             Rc::new(body)
-        });
-        let menu = gtk_box(Vertical);
-        let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
-            .popover(&Popover::builder().child(&menu).build()).build();
-        header_bar.pack_end(&menu_button);
-        let collection_button = Button::builder().label("Collection").build();
-        menu.append(&collection_button);
-        collection_button.connect_clicked({
-            let history = history.clone();
-            let window = window.clone();
-            let window_title = window_title.clone();
-            let scrolled_window = scrolled_window.clone();
-            let menu_button = menu_button.clone();
-            let back_button = back_button.clone();
-            move |_| {
-                if history.borrow().last().unwrap().0.body_type != BodyType::Collections {
-                    Rc::new(Body::collections(&window, history.clone()))
-                        .set(&window_title, &scrolled_window, history.clone(), &Some(back_button.clone()));
-                }
-                menu_button.popdown();
-            }
         });
         for BodyTable {
             body_type: body_body_type, query1: body_query1, query2: body_query2, scroll_adjustment: body_scroll_adjustment, ..
         } in history_bodies {
-            Body::from_body_table(body_body_type, body_query1, body_query2, &window_title, &scrolled_window,
-                history.clone(), &wrapper, &back_button, &window,
-            ).put_to_history(body_scroll_adjustment, history.clone());
+            Body::from_body_table(body_body_type, body_query1, body_query2, state.clone(), &wrapper)
+                .put_to_history(body_scroll_adjustment, state.history.clone());
         }
         if empty_history {
-            Rc::new(Body::artists(&window_title, &scrolled_window, history.clone(), &wrapper,
-                &Some(back_button.clone()))
-            ).set(&window_title, &scrolled_window, history.clone(), &None);
-        } else if let Some((body, _)) = history.borrow().last() {
-            body.set_window_title(&window_title);
-            let Body { widget, scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-            scrolled_window.set_child(Some((**widget).as_ref()));
-            scrolled_window.adjust(&body_scroll_adjustment);
+            Rc::new(Body::artists(state.clone(), &wrapper)).set_with_history(state.clone());
+        } else if let Some((body, _)) = state.history.borrow().last() {
+            body.clone().set(state.clone());
         }
         if config.now_playing_body_realized == 1 {
-            now_playing.borrow().realize_body(&window_title, &back_button, &header_body, &now_playing_body);
+            now_playing.borrow().realize_body(state.clone(), &now_playing_body);
         }
-        window.connect_close_request({
-            let history = history.clone();
-            let scrolled_window = scrolled_window.clone();
+        state.window.connect_close_request({
+            let state = state.clone();
             move |window| {
                 let (width, height) = window.default_size();
                 update(config_table).set((window_width.eq(width), window_height.eq(height),
@@ -127,9 +112,9 @@ fn main() -> Result<ExitCode> {
                     current_song_position.eq(PLAYBIN.get_position().unwrap_or(0) as i64)
                 )).execute(&mut get_connection()).unwrap();
                 delete(bodies).execute(&mut get_connection()).unwrap();
-                let history = history.borrow();
+                let history = state.history.borrow();
                 if let Some((body, _)) = history.last() {
-                    body.scroll_adjustment.set(scrolled_window.get_adjustment());
+                    body.scroll_adjustment.set(state.scrolled_window.get_adjustment());
                 }
                 insert_into(bodies).values(
                     history.iter().map(|(body, _)| { (body, History) })
@@ -149,7 +134,7 @@ fn main() -> Result<ExitCode> {
                 Propagation::Proceed
             }
         });
-        window.present();
+        state.window.present();
     });
     Ok(application.run())
 }

@@ -2,14 +2,16 @@ use std::cell::Cell;
 use std::path::PathBuf;
 use std::time::Duration;
 use adw::gdk::pango::{AttrInt, AttrList, EllipsizeMode, FontScale::Subscript, Weight, Weight::Bold};
-use adw::glib::timeout_add_local_once;
+use adw::glib::{timeout_add_local_once, Value};
 use adw::prelude::*;
-use gtk::{Box, Button, Image, Label, Orientation, ScrolledWindow};
+use gtk::{Box, Image, Orientation, ScrolledWindow, Widget};
 use gtk::builders::{BoxBuilder, LabelBuilder};
+use crate::common::constant::ACCENT_BG;
 
 pub mod util;
 pub mod wrapper;
 pub mod constant;
+pub mod state;
 
 pub fn box_builder() -> BoxBuilder {
     Box::builder().spacing(4).margin_start(4).margin_end(4).margin_top(4).margin_bottom(4)
@@ -93,29 +95,37 @@ impl ImagePathBuf for Image {
     }
 }
 
-pub trait StyledLabel {
-    fn numeric(self) -> Self;
+pub trait StyledWidget {
+    fn set_name(&self, name: impl Into<Value>);
+    fn set_background_accent(&self);
+    fn unset_background_accent(&self);
     fn with_css_class(self, css_class: &str) -> Self;
+    fn numeric(self) -> Self;
+    fn flat(self) -> Self;
+    fn suggested_action(self) -> Self;
 }
 
-impl StyledLabel for Label {
-    fn numeric(self) -> Self {
-        self.add_css_class("numeric");
-        self
+impl<W: IsA<Widget>> StyledWidget for W {
+    fn set_name(&self, name: impl Into<Value>) {
+        self.set_property("name", name);
+    }
+    fn set_background_accent(&self) {
+        self.set_name(ACCENT_BG);
+    }
+    fn unset_background_accent(&self) {
+        self.set_name(None::<String>);
     }
     fn with_css_class(self, css_class: &str) -> Self {
         self.add_css_class(css_class);
         self
     }
-}
-
-pub trait FlatButton {
-    fn flat(self) -> Button;
-}
-
-impl FlatButton for Button {
-    fn flat(self) -> Button {
-        self.add_css_class("flat");
-        self
+    fn numeric(self) -> Self {
+        self.with_css_class("numeric")
+    }
+    fn flat(self) -> Self {
+        self.with_css_class("flat")
+    }
+    fn suggested_action(self) -> Self {
+        self.with_css_class("suggested-action")
     }
 }

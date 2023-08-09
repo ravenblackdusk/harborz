@@ -1,15 +1,20 @@
 use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
-use adw::{ApplicationWindow, WindowTitle};
 use adw::prelude::*;
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+use adw::WindowTitle;
+use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use diesel::dsl::{count_distinct, count_star, max, min};
-use gtk::{Button, CenterBox, GestureClick, Grid, Image, Label, ScrolledWindow, Separator, Widget};
+use gtk::{CenterBox, GestureClick, Grid, Image, Label, Separator, Widget};
 use gtk::Orientation::Vertical;
+use id3::{Tag, TagLike, Version};
+use id3::v1v2::write_to_path;
+use Version::Id3v24;
 use crate::body::collection::add_collection_box;
+use crate::body::collection::model::Collection;
+use crate::body::merge::MergeState;
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
-use crate::common::constant::ACCENT_BG;
+use crate::common::state::State;
 use crate::common::util::{format, or_none_static, Plural};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
@@ -17,11 +22,12 @@ use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
 use crate::schema::collections::path;
 use crate::schema::config::dsl::config;
-use crate::schema::songs::{album, artist, path as song_path, year};
+use crate::schema::songs::{album, artist, id, path as song_path, year};
 use crate::schema::songs::dsl::songs;
-use crate::song::{get_current_album, join_path, WithCover};
+use crate::song::{get_current_album, join_path, Song, WithCover, WithPath};
 
 pub mod collection;
+mod merge;
 
 #[derive(diesel::Queryable, diesel::Selectable, Debug)]
 #[diesel(table_name = crate::schema::bodies)]
@@ -50,8 +56,10 @@ pub enum NavigationType {
 }
 
 pub struct Body {
-    pub title: Rc<String>,
-    pub subtitle: Rc<String>,
+    back_visible: bool,
+    title: Rc<String>,
+    subtitle: Rc<String>,
+    popover_box: gtk::Box,
     pub body_type: BodyType,
     pub query1: Option<Rc<String>>,
     pub query2: Option<Rc<String>>,
@@ -97,104 +105,125 @@ impl Castable for Option<Widget> {
     }
 }
 
-const NAME: &'static str = "name";
+const ARTIST: &'static str = "Artist";
 const ALBUM: &'static str = "Album";
 const SONG: &'static str = "Song";
+
+fn popover_box(state: Rc<State>, merge_state: Rc<MergeState>) -> gtk::Box {
+    let gtk_box = gtk::Box::builder().orientation(Vertical).build();
+    gtk_box.append(&collection::button::create(state.clone()));
+    gtk_box.append(&merge_state.merge_menu_button);
+    gtk_box
+}
 
 impl Body {
     pub fn set_window_title(&self, window_title: &WindowTitle) {
         window_title.set_title(&self.title);
         window_title.set_subtitle(&self.subtitle);
     }
-    pub fn from_body_table(body_type: BodyType, query1: Option<String>, query2: Option<String>,
-        window_title: &WindowTitle, scrolled_window: &ScrolledWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>,
-        now_playing: &Wrapper, back_button: &Button, window: &ApplicationWindow) -> Self {
+    pub fn from_body_table(body_type: BodyType, query1: Option<String>, query2: Option<String>, state: Rc<State>,
+        now_playing: &Wrapper) -> Self {
         let query1 = query1.map(Rc::new);
         let query2 = query2.map(Rc::new);
         match body_type {
-            BodyType::Artists => {
-                Body::artists(&window_title, &scrolled_window, history.clone(), &now_playing,
-                    &Some(back_button.clone()))
-            }
-            BodyType::Albums => {
-                Body::albums(query1.clone(), &window_title, &scrolled_window, history.clone(), &now_playing)
-            }
-            BodyType::Songs => { Body::songs(query1.clone(), query2.clone(), &now_playing) }
-            BodyType::Collections => { Body::collections(&window, history) }
+            BodyType::Artists => { Body::artists(state, now_playing) }
+            BodyType::Albums => { Body::albums(query1.clone(), state, now_playing) }
+            BodyType::Songs => { Body::songs(query1.clone(), query2.clone(), state, now_playing) }
+            BodyType::Collections => { Body::collections(state) }
         }
     }
     pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) {
         self.scroll_adjustment.set(scroll_adjustment);
         history.borrow_mut().push((Rc::new(self), true));
     }
-    pub fn set(self: Rc<Self>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, back_button: &Option<Button>) {
-        if let Some(back_button) = back_button { back_button.set_visible(true); }
-        self.set_window_title(window_title);
-        let mut history = history.borrow_mut();
+    pub fn set(self: Rc<Self>, state: Rc<State>) {
+        state.back_button.set_visible(self.back_visible);
+        self.set_window_title(&state.window_title);
+        state.menu_button.set_visible(if self.popover_box.first_child() == None {
+            false
+        } else {
+            state.menu_button.popover().unwrap().set_child(Some(&self.popover_box));
+            true
+        });
+        state.scrolled_window.set_child(Some((*self.widget).as_ref()));
+    }
+    pub fn set_with_history(self: Rc<Self>, state: Rc<State>) {
+        self.clone().set(state.clone());
+        let mut history = state.history.borrow_mut();
         if let Some((body, _)) = history.last() {
             let Body { scroll_adjustment, .. } = body.deref();
-            scroll_adjustment.set(scrolled_window.get_adjustment());
+            scroll_adjustment.set(state.scrolled_window.get_adjustment());
         }
-        scrolled_window.set_child(Some((*self.widget).as_ref()));
         history.push((self, false));
     }
-    pub fn collections(window: &ApplicationWindow, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) -> Self {
+    pub fn collections(state: Rc<State>) -> Self {
         Self {
+            back_visible: true,
             title: Rc::new(String::from("Harborz")),
             subtitle: Rc::new(String::from("Collection")),
+            popover_box: gtk::Box::builder().orientation(Vertical).build(),
             body_type: BodyType::Collections,
             query1: None,
             query2: None,
             scroll_adjustment: Cell::new(None),
-            widget: Box::new(add_collection_box(&window, history)),
+            widget: Box::new(add_collection_box(state)),
         }
     }
-    pub fn artists(window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper, back_button: &Option<Button>) -> Self {
+    pub fn artists(state: Rc<State>, now_playing: &Wrapper) -> Self {
         let artists = songs.group_by(artist).select((artist, count_distinct(album), count_star()))
             .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap();
+        let title = Rc::new(String::from("Harborz"));
+        let subtitle = Rc::new(artists.len().number_plural(ARTIST));
+        let merge_state = MergeState::new(ARTIST, state.clone(), title.clone(), subtitle.clone(),
+            |artists, artist_string, has_none| {
+                let in_filter = artist.eq_any(artists.iter().filter_map(|it| {
+                    (!Rc::ptr_eq(&it, &artist_string)).then_some(Some(it.to_string()))
+                }).collect::<Vec<_>>());
+                let statement = songs.inner_join(collections).into_boxed();
+                let filtered_statement = if has_none {
+                    statement.filter(in_filter.or(artist.is_null()))
+                } else {
+                    statement.filter(in_filter)
+                };
+                for (song, collection) in filtered_statement
+                    .get_results::<(Song, Collection)>(&mut get_connection()).unwrap() {
+                    let current_path = (&song, &collection).path();
+                    let mut tag = Tag::read_from_path(&current_path).unwrap();
+                    tag.set_artist(artist_string.deref());
+                    write_to_path(current_path, &tag, Id3v24).unwrap();
+                    update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string.to_string())))
+                        .execute(&mut get_connection()).unwrap();
+                }
+            },
+        );
         Self {
+            back_visible: false,
+            title,
+            subtitle,
+            popover_box: popover_box(state.clone(), merge_state.clone()),
             body_type: BodyType::Artists,
             query1: None,
             query2: None,
-            title: Rc::new(String::from("Harborz")),
-            subtitle: Rc::new(artists.len().number_plural("Artist")),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 let artists_box = gtk::Box::builder().orientation(Vertical).build();
                 for (artist_string, album_count, song_count) in artists {
                     let artist_string = artist_string.map(Rc::new);
-                    let window_title = window_title.clone();
-                    let scrolled_window = scrolled_window.clone();
                     let now_playing = now_playing.clone();
-                    let back_button = back_button.clone();
-                    let history = history.clone();
                     let artist_row = gtk::Box::builder().spacing(8).build();
+                    if let Some(artist_string) = artist_string.clone() {
+                        unsafe { artist_row.set_data("key", artist_string); }
+                    }
                     artists_box.append(&artist_row);
                     artists_box.append(&Separator::builder().build());
-                    let gesture_click = GestureClick::new();
-                    gesture_click.connect_pressed({
-                        let artist_row = artist_row.clone();
-                        move |_, _, _, _| { artist_row.set_property(NAME, ACCENT_BG); }
-                    });
-                    gesture_click.connect_stopped({
-                        let artist_row = artist_row.clone();
-                        move |_| { artist_row.set_property(NAME, None::<String>); }
-                    });
-                    gesture_click.connect_released({
+                    merge_state.clone().handle_click(&artist_row, {
                         let artist_string = artist_string.clone();
-                        let artist_row = artist_row.clone();
-                        move |_, _, x, y| {
-                            if artist_row.contains(x, y) {
-                                Rc::new(Self::albums(artist_string.clone(), &window_title, &scrolled_window,
-                                    history.clone(), &now_playing,
-                                )).set(&window_title, &scrolled_window, history.clone(), &back_button);
-                            }
-                            artist_row.set_property(NAME, None::<String>);
+                        let state = state.clone();
+                        move || {
+                            Rc::new(Self::albums(artist_string.clone(), state.clone(), &now_playing))
+                                .set_with_history(state.clone());
                         }
                     });
-                    artist_row.add_controller(gesture_click);
                     let artist_box = gtk::Box::builder().orientation(Vertical)
                         .margin_start(8).margin_end(4).margin_top(8).margin_bottom(8).build();
                     artist_row.append(&artist_box);
@@ -212,12 +241,11 @@ impl Body {
                     song_count_box.append(&Label::builder().label(song_count.plural(SONG)).subscript().build());
                     artist_row.append(&next_icon());
                 }
-                artists_box
+                merge_state.handle_pinch(artists_box)
             }),
         }
     }
-    pub fn albums(artist_string: Option<Rc<String>>, window_title: &WindowTitle, scrolled_window: &ScrolledWindow,
-        history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>, now_playing: &Wrapper) -> Self {
+    pub fn albums(artist_string: Option<Rc<String>>, state: Rc<State>, now_playing: &Wrapper) -> Self {
         let statement = songs.inner_join(collections).group_by(album).order_by(min(year).desc())
             .select((album, count_star(), min(path), min(song_path), min(year), max(year))).into_boxed();
         let albums = if let Some(artist_string) = artist_string.clone() {
@@ -226,49 +254,63 @@ impl Body {
             statement.filter(artist.is_null())
         }.get_results::<(Option<String>, i64, Option<String>, Option<String>, Option<i32>, Option<i32>)>(&mut get_connection())
             .unwrap();
+        let title = or_none_static(artist_string.clone());
+        let subtitle = Rc::new(albums.len().number_plural(ALBUM));
+        let merge_state = MergeState::new(ALBUM, state.clone(), title.clone(), subtitle.clone(),
+            |albums, album_string, has_none| {
+                let in_filter = album.eq_any(albums.iter().filter_map(|it| {
+                    (!Rc::ptr_eq(&it, &album_string)).then_some(Some(it.to_string()))
+                }).collect::<Vec<_>>());
+                let statement = songs.inner_join(collections).into_boxed();
+                let filtered_statement = if has_none {
+                    statement.filter(in_filter.or(album.is_null()))
+                } else {
+                    statement.filter(in_filter)
+                };
+                for (song, collection) in filtered_statement.get_results::<(Song, Collection)>(&mut get_connection())
+                    .unwrap() {
+                    let current_path = (&song, &collection).path();
+                    let mut tag = Tag::read_from_path(&current_path).unwrap();
+                    tag.set_album(album_string.deref());
+                    write_to_path(current_path, &tag, Id3v24).unwrap();
+                    update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string.to_string())))
+                        .execute(&mut get_connection()).unwrap();
+                }
+            },
+        );
         Self {
+            back_visible: true,
+            title,
+            subtitle,
+            popover_box: popover_box(state.clone(), merge_state.clone()),
             body_type: BodyType::Albums,
             query1: artist_string.clone(),
             query2: None,
-            title: or_none_static(artist_string.clone()),
-            subtitle: Rc::new(albums.len().number_plural(ALBUM)),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 let albums_box = gtk::Box::builder().orientation(Vertical).build();
                 for (album_string, count, collection_path, album_song_path, min_year, max_year) in albums {
-                    let album_string = album_string.map(Rc::new);
-                    let window_title = window_title.clone();
-                    let scrolled_window = scrolled_window.clone();
                     let now_playing = now_playing.clone();
-                    let history = history.clone();
+                    let album_string = album_string.map(Rc::new);
                     let album_row = gtk::Box::builder().spacing(8).build();
+                    if let Some(album_string) = album_string.clone() {
+                        unsafe { album_row.set_data("key", album_string); }
+                    }
                     albums_box.append(&album_row);
                     albums_box.append(&Separator::builder().build());
                     album_row.append(Image::builder().pixel_size(38).margin_start(8).build().set_cover(
                         &join_path(&collection_path.unwrap(), &album_song_path.unwrap()).cover(), ALBUM_ICON)
                     );
-                    let gesture_click = GestureClick::new();
-                    gesture_click.connect_pressed({
-                        let album_row = album_row.clone();
-                        move |_, _, _, _| { album_row.set_property(NAME, ACCENT_BG); }
-                    });
-                    gesture_click.connect_stopped({
-                        let album_row = album_row.clone();
-                        move |_| { album_row.set_property(NAME, None::<String>); }
-                    });
-                    gesture_click.connect_released({
+                    merge_state.clone().handle_click(&album_row, {
                         let album_string = album_string.clone();
                         let artist_string = artist_string.clone();
-                        let album_row = album_row.clone();
-                        move |_, _, x, y| {
-                            if album_row.contains(x, y) {
-                                Rc::new(Self::songs(album_string.clone(), artist_string.clone(), &now_playing))
-                                    .set(&window_title, &scrolled_window, history.clone(), &None);
-                            }
-                            album_row.set_property(NAME, None::<String>);
+                        let state = state.clone();
+                        move || {
+                            Rc::new(Self::songs(album_string.clone(), artist_string.clone(), state.clone(),
+                                &now_playing,
+                            )).set_with_history(state.clone());
                         }
                     });
-                    album_row.add_controller(gesture_click);
                     let album_box = gtk::Box::builder().orientation(Vertical).margin_top(8).margin_bottom(8).build();
                     album_row.append(&album_box);
                     album_box.append(&Label::builder().label(&*or_none_static(album_string)).margin_ellipsized(4).bold()
@@ -291,13 +333,20 @@ impl Body {
                     album_box.append(&info_box);
                     album_row.append(&next_icon());
                 }
-                albums_box
+                merge_state.handle_pinch(albums_box)
             }),
         }
     }
-    pub fn songs(album_string: Option<Rc<String>>, artist_string: Option<Rc<String>>, now_playing: &Wrapper) -> Self {
+    pub fn songs(album_string: Option<Rc<String>>, artist_string: Option<Rc<String>>, state: Rc<State>,
+        now_playing: &Wrapper) -> Self {
         let current_album = get_current_album(artist_string.clone(), album_string.clone(), &mut get_connection());
         Self {
+            back_visible: true,
+            popover_box: {
+                let gtk_box = gtk::Box::builder().orientation(Vertical).build();
+                gtk_box.append(&collection::button::create(state));
+                gtk_box
+            },
             body_type: BodyType::Songs,
             query1: album_string.clone(),
             query2: artist_string,
