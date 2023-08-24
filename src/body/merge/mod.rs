@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender, TryRecvError::*};
+use std::sync::mpsc::{channel, TryRecvError::*};
 use std::thread;
 use std::time::Duration;
 use adw::glib::{ControlFlow::*, timeout_add_local};
@@ -13,9 +13,16 @@ use gtk::{Button, GestureClick, GestureZoom, Overlay, ProgressBar};
 use gtk::EventSequenceState::Claimed;
 use gtk::Orientation::Vertical;
 use gtk::PropagationPhase::Capture;
+use id3::{Tag, TagLike};
+use id3::ErrorKind::NoTag;
+use id3::v1v2::write_to_path;
+use id3::Version::Id3v24;
+use log::error;
+use crate::body::collection::model::Collection;
 use crate::common::state::State;
 use crate::common::StyledWidget;
 use crate::common::util::Plural;
+use crate::song::{Song, WithPath};
 
 pub(in crate::body) struct MergeState {
     entity: &'static str,
@@ -40,16 +47,29 @@ impl MergeButton for Button {
     }
 }
 
+#[derive(Copy, Clone)]
+pub(in crate::body) enum EntityType {
+    Artist,
+    Album,
+}
+
+pub(in crate::body) struct Entity {
+    pub string: &'static str,
+    pub entity_type: EntityType,
+}
+
 impl MergeState {
-    pub(in crate::body) fn new<M: Fn(Vec<Arc<String>>, Arc<String>, bool, Sender<f64>) + Clone + Send + 'static>(
-        entity: &'static str, state: Rc<State>, title: Arc<String>, subtitle: Rc<String>, on_merge: M) -> Rc<Self> {
+    pub(in crate::body) fn new<G: Fn(Vec<Option<String>>, bool) -> Vec<(Song, Collection)> + Send + Clone + 'static,
+        M: Fn(Song, Arc<String>) + Send + Clone + 'static>(merge_entity: Entity, state: Rc<State>, title: Arc<String>,
+        subtitle: Rc<String>, get_songs: G, merge: M) -> Rc<Self> {
         let cancel_button = Button::builder().label("Cancel").build();
         let merge_button = Button::builder().label("Merge").build().suggested_action();
         merge_button.disable();
-        let merge_menu_button = Button::builder().label(format!("Merge {}s", entity)).build();
-        let heading = format!("Choose the correct {} name", entity);
+        let Entity { string, entity_type } = merge_entity;
+        let merge_menu_button = Button::builder().label(format!("Merge {}s", string)).build();
+        let heading = format!("Choose the correct {} name", string);
         let this = Rc::new(MergeState {
-            entity,
+            entity: string,
             state: state.clone(),
             title,
             subtitle,
@@ -85,18 +105,49 @@ impl MergeState {
                     gtk_box.append(&button);
                     button.connect_clicked({
                         let overlay = overlay.clone();
-                        let on_merge = on_merge.clone();
+                        let get_songs = get_songs.clone();
                         let entities = entities.clone();
+                        let merge = merge.clone();
                         let dialog = dialog.clone();
                         move |_| {
-                            let progress_bar = ProgressBar::builder().hexpand(true).build().osd();
+                            let progress_bar = ProgressBar::builder().hexpand(true).build();
                             overlay.add_overlay(&progress_bar);
                             let (sender, receiver) = channel::<f64>();
                             thread::spawn({
-                                let on_merge = on_merge.clone();
+                                let get_songs = get_songs.clone();
                                 let entities = entities.clone();
                                 let entity = entity.clone();
-                                move || { on_merge(entities.clone(), entity.clone(), has_none, sender); }
+                                let merge = merge.clone();
+                                move || {
+                                    let song_collections = get_songs(entities.iter().filter_map(|it| {
+                                        (!Arc::ptr_eq(&it, &entity)).then_some(Some(it.to_string()))
+                                    }).collect::<Vec<_>>(), has_none);
+                                    let total = song_collections.len();
+                                    for (i, (song, collection)) in song_collections.into_iter().enumerate() {
+                                        let current_path = (&song, &collection).path();
+                                        let tag = match Tag::read_from_path(&current_path) {
+                                            Ok(tag) => { Some(tag) }
+                                            Err(error) => {
+                                                if let NoTag = error.kind {
+                                                    Some(Tag::new())
+                                                } else {
+                                                    error!("error reading tags on file {:?} while trying to set {} {}: {}",
+                                                        current_path, string, entity.deref(), error);
+                                                    None
+                                                }
+                                            }
+                                        };
+                                        if let Some(mut tag) = tag {
+                                            match entity_type {
+                                                EntityType::Artist => { tag.set_artist(entity.deref()); }
+                                                EntityType::Album => { tag.set_album(entity.deref()); }
+                                            }
+                                            write_to_path(current_path, &tag, Id3v24).unwrap();
+                                            merge(song, entity.clone());
+                                        }
+                                        sender.send(i as f64 / total as f64).unwrap();
+                                    }
+                                }
                             });
                             timeout_add_local(Duration::from_millis(500), {
                                 let dialog = dialog.clone();
@@ -112,9 +163,7 @@ impl MergeState {
                                             Ok(fraction) => { merge_progress = Some(fraction); }
                                         }
                                     }
-                                    if let Some(fraction) = merge_progress {
-                                        progress_bar.set_fraction(fraction);
-                                    }
+                                    if let Some(fraction) = merge_progress { progress_bar.set_fraction(fraction); }
                                     Continue
                                 }
                             });

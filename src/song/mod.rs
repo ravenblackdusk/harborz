@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
@@ -6,7 +5,7 @@ use std::time::{Duration, SystemTime};
 use adw::glib::{ControlFlow, timeout_add};
 use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
-use diesel::result::Error;
+use diesel::result::Error::NotFound;
 use gstreamer::ClockTime;
 use gstreamer::tags::*;
 use gstreamer_pbutils::Discoverer;
@@ -101,7 +100,7 @@ pub fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
             if discoverer_info.video_streams().is_empty() && !discoverer_info.audio_streams().is_empty() {
                 let tag_list = discoverer_info.tags().unwrap();
                 let tag_list_ref = tag_list.as_ref();
-                if let Err(Error::NotFound) = insert_or_ignore_into(songs).values((
+                if let Err(NotFound) = insert_or_ignore_into(songs).values((
                     path.eq(entry.path().strip_prefix(&collection.path)?.to_str().unwrap()),
                     title.eq(tag_list_ref.get::<Title>().map(|it| { it.get().to_string() })),
                     artist.eq(tag_list_ref.get::<Artist>().map(|it| { it.get().to_string() })),
@@ -135,16 +134,16 @@ pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<Sqli
     Ok(songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)?)
 }
 
-pub fn get_current_album(artist_string: Option<Arc<String>>, album_string: Option<Arc<String>>,
+pub fn get_current_album(artist_string: Option<impl AsRef<String>>, album_string: Option<impl AsRef<String>>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Vec<(Song, Collection)> {
     let statement = songs.inner_join(collections).order_by((track_number, id)).into_boxed();
     let artist_filtered_statement = if let Some(artist_string) = artist_string {
-        statement.filter(artist.eq(artist_string.deref().to_owned()))
+        statement.filter(artist.eq(artist_string.as_ref().to_owned()))
     } else {
         statement.filter(artist.is_null())
     };
     if let Some(album_string) = album_string {
-        artist_filtered_statement.filter(album.eq(album_string.deref().to_owned()))
+        artist_filtered_statement.filter(album.eq(album_string.as_ref().to_owned()))
     } else {
         artist_filtered_statement.filter(album.is_null())
     }.get_results::<(Song, Collection)>(connection).unwrap()

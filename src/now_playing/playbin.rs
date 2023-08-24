@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
 use diesel::{Connection, QueryDsl, RunQueryDsl};
 use gstreamer::{ClockTime, ElementFactory, Pipeline, SeekFlags};
@@ -76,7 +75,7 @@ impl Playbin for Pipeline {
                 .select((current_song_id, artist, album))
                 .get_result::<(Option<i32>, Option<String>, Option<String>)>(connection) {
                 let song_collections
-                    = get_current_album(artist_string.map(Arc::new), album_string.map(Arc::new), connection);
+                    = get_current_album(artist_string.map(Rc::new), album_string.map(Rc::new), connection);
                 let delta_song_index = song_collections.iter().position(|(song, _)| { song.id == current_song_id_int })
                     .unwrap() as i32 + delta;
                 if delta_song_index >= 0 && delta_song_index < song_collections.len() as i32 {

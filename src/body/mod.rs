@@ -8,14 +8,9 @@ use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl, up
 use diesel::dsl::{count_distinct, count_star, max, min};
 use gtk::{CenterBox, GestureClick, Grid, Image, Label, Separator, Widget};
 use gtk::Orientation::Vertical;
-use id3::{Tag, TagLike, Version};
-use id3::ErrorKind::NoTag;
-use id3::v1v2::write_to_path;
-use log::error;
-use Version::Id3v24;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
-use crate::body::merge::MergeState;
+use crate::body::merge::{Entity, EntityType::*, MergeState};
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
 use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
@@ -28,7 +23,7 @@ use crate::schema::collections::path;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::{album, artist, id, path as song_path, year};
 use crate::schema::songs::dsl::songs;
-use crate::song::{get_current_album, join_path, Song, WithCover, WithPath};
+use crate::song::{get_current_album, join_path, Song, WithCover};
 
 pub mod collection;
 mod merge;
@@ -178,42 +173,18 @@ impl Body {
             .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap();
         let title = Arc::new(String::from("Harborz"));
         let subtitle = Rc::new(artists.len().number_plural(ARTIST));
-        let merge_state = MergeState::new(ARTIST, state.clone(), title.clone(), subtitle.clone(),
-            |artists, artist_string, has_none, sender| {
-                let in_filter = artist.eq_any(artists.iter().filter_map(|it| {
-                    (!Arc::ptr_eq(&it, &artist_string)).then_some(Some(it.to_string()))
-                }).collect::<Vec<_>>());
+        let merge_state = MergeState::new(Entity { string: ARTIST, entity_type: Artist }, state.clone(), title.clone(),
+            subtitle.clone(), |artists, has_none| {
+                let in_filter = artist.eq_any(artists);
                 let statement = songs.inner_join(collections).into_boxed();
-                let filtered_statement = if has_none {
+                if has_none {
                     statement.filter(in_filter.or(artist.is_null()))
                 } else {
                     statement.filter(in_filter)
-                };
-                let song_collections = filtered_statement.get_results::<(Song, Collection)>(&mut get_connection())
-                    .unwrap();
-                let total = song_collections.len();
-                for (i, (song, collection)) in song_collections.into_iter().enumerate() {
-                    let current_path = (&song, &collection).path();
-                    let tag = match Tag::read_from_path(&current_path) {
-                        Ok(tag) => { Some(tag) }
-                        Err(error) => {
-                            if let NoTag = error.kind {
-                                Some(Tag::new())
-                            } else {
-                                error!("error reading tags on file {:?} while trying to set artist {}: {}",
-                                    current_path, artist_string.deref(), error);
-                                None
-                            }
-                        }
-                    };
-                    if let Some(mut tag) = tag {
-                        tag.set_artist(artist_string.deref());
-                        write_to_path(current_path, &tag, Id3v24).unwrap();
-                        update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string.to_string())))
-                            .execute(&mut get_connection()).unwrap();
-                    }
-                    sender.send(i as f64 / total as f64).unwrap();
-                }
+                }.get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
+            }, |song, artist_string| {
+                update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string.to_string())))
+                    .execute(&mut get_connection()).unwrap();
             },
         );
         Self {
@@ -275,42 +246,18 @@ impl Body {
             .unwrap();
         let title = or_none_arc(artist_string.clone());
         let subtitle = Rc::new(albums.len().number_plural(ALBUM));
-        let merge_state = MergeState::new(ALBUM, state.clone(), title.clone(), subtitle.clone(),
-            |albums, album_string, has_none, sender| {
-                let in_filter = album.eq_any(albums.iter().filter_map(|it| {
-                    (!Arc::ptr_eq(&it, &album_string)).then_some(Some(it.to_string()))
-                }).collect::<Vec<_>>());
+        let merge_state = MergeState::new(Entity { string: ALBUM, entity_type: Album }, state.clone(), title.clone(),
+            subtitle.clone(), |albums, has_none| {
+                let in_filter = album.eq_any(albums);
                 let statement = songs.inner_join(collections).into_boxed();
-                let filtered_statement = if has_none {
+                if has_none {
                     statement.filter(in_filter.or(album.is_null()))
                 } else {
                     statement.filter(in_filter)
-                };
-                let song_collections = filtered_statement.get_results::<(Song, Collection)>(&mut get_connection())
-                    .unwrap();
-                let total = song_collections.len();
-                for (i, (song, collection)) in song_collections.into_iter().enumerate() {
-                    let current_path = (&song, &collection).path();
-                    let tag = match Tag::read_from_path(&current_path) {
-                        Ok(tag) => { Some(tag) }
-                        Err(error) => {
-                            if let NoTag = error.kind {
-                                Some(Tag::new())
-                            } else {
-                                error!("error reading tags on file {:?} while trying to set album {}: {}",
-                                    current_path, album_string.deref(), error);
-                                None
-                            }
-                        }
-                    };
-                    if let Some(mut tag) = tag {
-                        tag.set_album(album_string.deref());
-                        write_to_path(current_path, &tag, Id3v24).unwrap();
-                        update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string.to_string())))
-                            .execute(&mut get_connection()).unwrap();
-                    }
-                    sender.send(i as f64 / total as f64).unwrap();
-                }
+                }.get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
+            }, |song, album_string| {
+                update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string.to_string())))
+                    .execute(&mut get_connection()).unwrap();
             },
         );
         Self {
