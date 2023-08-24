@@ -13,7 +13,6 @@ use crate::now_playing::now_playing::NowPlaying;
 pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State>) -> (gtk::Box, GestureSwipe, GestureClick) {
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name(ACCENT_BG).build();
-    now_playing.borrow().progress_bar.add_css_class("osd");
     now_playing_and_progress.append(&now_playing.borrow().progress_bar);
     let now_playing_and_play_pause = gtk::Box::builder().margin_start(8).margin_end(8).margin_top(8).margin_bottom(8)
         .build();

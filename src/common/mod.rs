@@ -103,6 +103,7 @@ pub trait StyledWidget {
     fn numeric(self) -> Self;
     fn flat(self) -> Self;
     fn suggested_action(self) -> Self;
+    fn osd(self) -> Self;
 }
 
 impl<W: IsA<Widget>> StyledWidget for W {
@@ -127,5 +128,8 @@ impl<W: IsA<Widget>> StyledWidget for W {
     }
     fn suggested_action(self) -> Self {
         self.with_css_class("suggested-action")
+    }
+    fn osd(self) -> Self {
+        self.with_css_class("osd")
     }
 }

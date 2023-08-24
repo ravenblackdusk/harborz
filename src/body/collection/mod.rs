@@ -45,7 +45,7 @@ pub(in crate::body) fn add_collection_box(state: Rc<State>) -> gtk::Box {
                             let (sender, receiver) = channel::<ImportProgress>();
                             let mut last_id: Option<i32> = None;
                             let mut progress_bar_map = HashMap::new();
-                            timeout_add_local(Duration::from_millis(200), {
+                            timeout_add_local(Duration::from_millis(500), {
                                 let collection_box = collection_box.clone();
                                 move || {
                                     if match receiver.try_recv() {

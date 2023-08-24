@@ -2,9 +2,14 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender, TryRecvError::*};
+use std::thread;
+use std::time::Duration;
+use adw::glib::{ControlFlow::*, timeout_add_local};
 use adw::MessageDialog;
 use adw::prelude::*;
-use gtk::{Button, GestureClick, GestureZoom};
+use gtk::{Button, GestureClick, GestureZoom, Overlay, ProgressBar};
 use gtk::EventSequenceState::Claimed;
 use gtk::Orientation::Vertical;
 use gtk::PropagationPhase::Capture;
@@ -15,7 +20,7 @@ use crate::common::util::Plural;
 pub(in crate::body) struct MergeState {
     entity: &'static str,
     state: Rc<State>,
-    title: Rc<String>,
+    title: Arc<String>,
     subtitle: Rc<String>,
     merging: Cell<bool>,
     selected_for_merge: RefCell<HashSet<gtk::Box>>,
@@ -24,11 +29,23 @@ pub(in crate::body) struct MergeState {
     pub merge_menu_button: Button,
 }
 
+trait MergeButton {
+    fn disable(&self);
+}
+
+impl MergeButton for Button {
+    fn disable(&self) {
+        self.set_sensitive(false);
+        self.set_tooltip_text(Some("Select 2 or more"));
+    }
+}
+
 impl MergeState {
-    pub(in crate::body) fn new<F: Fn(Vec<Rc<String>>, Rc<String>, bool) + Clone + 'static>(entity: &'static str,
-        state: Rc<State>, title: Rc<String>, subtitle: Rc<String>, on_merge: F) -> Rc<Self> {
+    pub(in crate::body) fn new<M: Fn(Vec<Arc<String>>, Arc<String>, bool, Sender<f64>) + Clone + Send + 'static>(
+        entity: &'static str, state: Rc<State>, title: Arc<String>, subtitle: Rc<String>, on_merge: M) -> Rc<Self> {
         let cancel_button = Button::builder().label("Cancel").build();
         let merge_button = Button::builder().label("Merge").build().suggested_action();
+        merge_button.disable();
         let merge_menu_button = Button::builder().label(format!("Merge {}s", entity)).build();
         let heading = format!("Choose the correct {} name", entity);
         let this = Rc::new(MergeState {
@@ -55,10 +72,11 @@ impl MergeState {
             let this = this.clone();
             move |_| {
                 let gtk_box = gtk::Box::builder().orientation(Vertical).build();
+                let overlay = Overlay::builder().child(&gtk_box).build();
                 let dialog = MessageDialog::builder().heading(&heading).title(&heading).modal(true)
-                    .extra_child(&gtk_box).transient_for(&state.window).build();
+                    .extra_child(&overlay).transient_for(&state.window).build();
                 let entities = this.selected_for_merge.borrow().iter().map(|entity| {
-                    unsafe { entity.data::<Rc<String>>("key").map(|it| { it.as_ref().clone() }) }
+                    unsafe { entity.data::<Arc<String>>("key").map(|it| { it.as_ref().clone() }) }
                 }).collect::<Vec<_>>();
                 let has_none = entities.contains(&None);
                 let entities = entities.into_iter().filter_map(|it| { it }).collect::<Vec<_>>();
@@ -66,12 +84,40 @@ impl MergeState {
                     let button = Button::builder().label(entity.deref()).build().flat();
                     gtk_box.append(&button);
                     button.connect_clicked({
+                        let overlay = overlay.clone();
                         let on_merge = on_merge.clone();
                         let entities = entities.clone();
                         let dialog = dialog.clone();
                         move |_| {
-                            on_merge(entities.clone(), entity.clone(), has_none);
-                            dialog.close();
+                            let progress_bar = ProgressBar::builder().hexpand(true).build().osd();
+                            overlay.add_overlay(&progress_bar);
+                            let (sender, receiver) = channel::<f64>();
+                            thread::spawn({
+                                let on_merge = on_merge.clone();
+                                let entities = entities.clone();
+                                let entity = entity.clone();
+                                move || { on_merge(entities.clone(), entity.clone(), has_none, sender); }
+                            });
+                            timeout_add_local(Duration::from_millis(500), {
+                                let dialog = dialog.clone();
+                                move || {
+                                    let mut merge_progress: Option<f64> = None;
+                                    loop {
+                                        match receiver.try_recv() {
+                                            Err(Empty) => { break; }
+                                            Err(Disconnected) => {
+                                                dialog.close();
+                                                return Break;
+                                            }
+                                            Ok(fraction) => { merge_progress = Some(fraction); }
+                                        }
+                                    }
+                                    if let Some(fraction) = merge_progress {
+                                        progress_bar.set_fraction(fraction);
+                                    }
+                                    Continue
+                                }
+                            });
                         }
                     });
                 }
@@ -109,14 +155,20 @@ impl MergeState {
         self.selected_for_merge.borrow_mut().clear();
         self.merging.set(false);
     }
-    fn update_merging_subtitle(&self) {
-        self.state.window_title.set_subtitle(&format!("{} selected for merge",
-            self.selected_for_merge.borrow().len().number_plural(&self.entity)));
+    fn update_selected_count(&self) {
+        let count = self.selected_for_merge.borrow().len();
+        self.state.window_title.set_subtitle(&format!("{} selected for merge", count.number_plural(&self.entity)));
+        if count > 1 {
+            self.merge_button.set_sensitive(true);
+            self.merge_button.set_tooltip_text(None);
+        } else {
+            self.merge_button.disable();
+        }
     }
     fn select_row_for_merge(&self, row: &gtk::Box) {
         self.selected_for_merge.borrow_mut().insert(row.clone());
         row.set_background_accent();
-        self.update_merging_subtitle();
+        self.update_selected_count();
     }
     pub(in crate::body) fn handle_click<F: Fn() + 'static>(self: Rc<Self>, row: &gtk::Box, on_click: F) {
         let gesture_click = GestureClick::new();
@@ -136,7 +188,7 @@ impl MergeState {
                 if self.merging.get() {
                     if self.selected_for_merge.borrow().contains(&row) {
                         self.selected_for_merge.borrow_mut().remove(&row);
-                        self.update_merging_subtitle();
+                        self.update_selected_count();
                         row.unset_background_accent();
                     } else {
                         self.select_row_for_merge(&row);

@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::Arc;
 use adw::prelude::*;
 use adw::WindowTitle;
 use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl, update};
@@ -8,7 +9,9 @@ use diesel::dsl::{count_distinct, count_star, max, min};
 use gtk::{CenterBox, GestureClick, Grid, Image, Label, Separator, Widget};
 use gtk::Orientation::Vertical;
 use id3::{Tag, TagLike, Version};
+use id3::ErrorKind::NoTag;
 use id3::v1v2::write_to_path;
+use log::error;
 use Version::Id3v24;
 use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
@@ -16,7 +19,7 @@ use crate::body::merge::MergeState;
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
 use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
-use crate::common::util::{format, or_none_static, Plural};
+use crate::common::util::{format, or_none_arc, Plural};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
 use crate::config::Config;
 use crate::db::get_connection;
@@ -58,12 +61,12 @@ pub enum NavigationType {
 
 pub struct Body {
     back_visible: bool,
-    title: Rc<String>,
+    title: Arc<String>,
     subtitle: Rc<String>,
     popover_box: gtk::Box,
     pub body_type: BodyType,
-    pub query1: Option<Rc<String>>,
-    pub query2: Option<Rc<String>>,
+    pub query1: Option<Arc<String>>,
+    pub query2: Option<Arc<String>>,
     pub scroll_adjustment: Cell<Option<f32>>,
     pub widget: Box<dyn AsRef<Widget>>,
 }
@@ -124,8 +127,8 @@ impl Body {
     }
     pub fn from_body_table(body_type: BodyType, query1: Option<String>, query2: Option<String>, state: Rc<State>,
         now_playing: &Wrapper) -> Self {
-        let query1 = query1.map(Rc::new);
-        let query2 = query2.map(Rc::new);
+        let query1 = query1.map(Arc::new);
+        let query2 = query2.map(Arc::new);
         match body_type {
             BodyType::Artists => { Body::artists(state, now_playing) }
             BodyType::Albums => { Body::albums(query1.clone(), state, now_playing) }
@@ -160,7 +163,7 @@ impl Body {
     pub fn collections(state: Rc<State>) -> Self {
         Self {
             back_visible: true,
-            title: Rc::new(String::from("Harborz")),
+            title: Arc::new(String::from("Harborz")),
             subtitle: Rc::new(String::from("Collection")),
             popover_box: gtk::Box::builder().orientation(Vertical).build(),
             body_type: BodyType::Collections,
@@ -173,12 +176,12 @@ impl Body {
     pub fn artists(state: Rc<State>, now_playing: &Wrapper) -> Self {
         let artists = songs.group_by(artist).select((artist, count_distinct(album), count_star()))
             .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap();
-        let title = Rc::new(String::from("Harborz"));
+        let title = Arc::new(String::from("Harborz"));
         let subtitle = Rc::new(artists.len().number_plural(ARTIST));
         let merge_state = MergeState::new(ARTIST, state.clone(), title.clone(), subtitle.clone(),
-            |artists, artist_string, has_none| {
+            |artists, artist_string, has_none, sender| {
                 let in_filter = artist.eq_any(artists.iter().filter_map(|it| {
-                    (!Rc::ptr_eq(&it, &artist_string)).then_some(Some(it.to_string()))
+                    (!Arc::ptr_eq(&it, &artist_string)).then_some(Some(it.to_string()))
                 }).collect::<Vec<_>>());
                 let statement = songs.inner_join(collections).into_boxed();
                 let filtered_statement = if has_none {
@@ -186,14 +189,30 @@ impl Body {
                 } else {
                     statement.filter(in_filter)
                 };
-                for (song, collection) in filtered_statement
-                    .get_results::<(Song, Collection)>(&mut get_connection()).unwrap() {
+                let song_collections = filtered_statement.get_results::<(Song, Collection)>(&mut get_connection())
+                    .unwrap();
+                let total = song_collections.len();
+                for (i, (song, collection)) in song_collections.into_iter().enumerate() {
                     let current_path = (&song, &collection).path();
-                    let mut tag = Tag::read_from_path(&current_path).unwrap();
-                    tag.set_artist(artist_string.deref());
-                    write_to_path(current_path, &tag, Id3v24).unwrap();
-                    update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string.to_string())))
-                        .execute(&mut get_connection()).unwrap();
+                    let tag = match Tag::read_from_path(&current_path) {
+                        Ok(tag) => { Some(tag) }
+                        Err(error) => {
+                            if let NoTag = error.kind {
+                                Some(Tag::new())
+                            } else {
+                                error!("error reading tags on file {:?} while trying to set artist {}: {}",
+                                    current_path, artist_string.deref(), error);
+                                None
+                            }
+                        }
+                    };
+                    if let Some(mut tag) = tag {
+                        tag.set_artist(artist_string.deref());
+                        write_to_path(current_path, &tag, Id3v24).unwrap();
+                        update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string.to_string())))
+                            .execute(&mut get_connection()).unwrap();
+                    }
+                    sender.send(i as f64 / total as f64).unwrap();
                 }
             },
         );
@@ -209,7 +228,7 @@ impl Body {
             widget: Box::new({
                 let artists_box = gtk::Box::builder().orientation(Vertical).build();
                 for (artist_string, album_count, song_count) in artists {
-                    let artist_string = artist_string.map(Rc::new);
+                    let artist_string = artist_string.map(Arc::new);
                     let now_playing = now_playing.clone();
                     let artist_row = gtk::Box::builder().spacing(8).build();
                     if let Some(artist_string) = artist_string.clone() {
@@ -228,7 +247,7 @@ impl Body {
                     let artist_box = gtk::Box::builder().orientation(Vertical)
                         .margin_start(8).margin_end(4).margin_top(8).margin_bottom(8).build();
                     artist_row.append(&artist_box);
-                    artist_box.append(&Label::builder().label(&*or_none_static(artist_string)).ellipsized().build());
+                    artist_box.append(&Label::builder().label(&*or_none_arc(artist_string)).ellipsized().build());
                     let count_box = gtk::Box::builder().spacing(4).name(INSENSITIVE_FG).build();
                     artist_box.append(&count_box);
                     let album_count_box = gtk::Box::builder().spacing(4).build();
@@ -245,7 +264,7 @@ impl Body {
             }),
         }
     }
-    pub fn albums(artist_string: Option<Rc<String>>, state: Rc<State>, now_playing: &Wrapper) -> Self {
+    pub fn albums(artist_string: Option<Arc<String>>, state: Rc<State>, now_playing: &Wrapper) -> Self {
         let statement = songs.inner_join(collections).group_by(album).order_by(min(year).desc())
             .select((album, count_star(), min(path), min(song_path), min(year), max(year))).into_boxed();
         let albums = if let Some(artist_string) = artist_string.clone() {
@@ -254,12 +273,12 @@ impl Body {
             statement.filter(artist.is_null())
         }.get_results::<(Option<String>, i64, Option<String>, Option<String>, Option<i32>, Option<i32>)>(&mut get_connection())
             .unwrap();
-        let title = or_none_static(artist_string.clone());
+        let title = or_none_arc(artist_string.clone());
         let subtitle = Rc::new(albums.len().number_plural(ALBUM));
         let merge_state = MergeState::new(ALBUM, state.clone(), title.clone(), subtitle.clone(),
-            |albums, album_string, has_none| {
+            |albums, album_string, has_none, sender| {
                 let in_filter = album.eq_any(albums.iter().filter_map(|it| {
-                    (!Rc::ptr_eq(&it, &album_string)).then_some(Some(it.to_string()))
+                    (!Arc::ptr_eq(&it, &album_string)).then_some(Some(it.to_string()))
                 }).collect::<Vec<_>>());
                 let statement = songs.inner_join(collections).into_boxed();
                 let filtered_statement = if has_none {
@@ -267,14 +286,30 @@ impl Body {
                 } else {
                     statement.filter(in_filter)
                 };
-                for (song, collection) in filtered_statement.get_results::<(Song, Collection)>(&mut get_connection())
-                    .unwrap() {
+                let song_collections = filtered_statement.get_results::<(Song, Collection)>(&mut get_connection())
+                    .unwrap();
+                let total = song_collections.len();
+                for (i, (song, collection)) in song_collections.into_iter().enumerate() {
                     let current_path = (&song, &collection).path();
-                    let mut tag = Tag::read_from_path(&current_path).unwrap();
-                    tag.set_album(album_string.deref());
-                    write_to_path(current_path, &tag, Id3v24).unwrap();
-                    update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string.to_string())))
-                        .execute(&mut get_connection()).unwrap();
+                    let tag = match Tag::read_from_path(&current_path) {
+                        Ok(tag) => { Some(tag) }
+                        Err(error) => {
+                            if let NoTag = error.kind {
+                                Some(Tag::new())
+                            } else {
+                                error!("error reading tags on file {:?} while trying to set album {}: {}",
+                                    current_path, album_string.deref(), error);
+                                None
+                            }
+                        }
+                    };
+                    if let Some(mut tag) = tag {
+                        tag.set_album(album_string.deref());
+                        write_to_path(current_path, &tag, Id3v24).unwrap();
+                        update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string.to_string())))
+                            .execute(&mut get_connection()).unwrap();
+                    }
+                    sender.send(i as f64 / total as f64).unwrap();
                 }
             },
         );
@@ -291,7 +326,7 @@ impl Body {
                 let albums_box = gtk::Box::builder().orientation(Vertical).build();
                 for (album_string, count, collection_path, album_song_path, min_year, max_year) in albums {
                     let now_playing = now_playing.clone();
-                    let album_string = album_string.map(Rc::new);
+                    let album_string = album_string.map(Arc::new);
                     let album_row = gtk::Box::builder().spacing(8).build();
                     if let Some(album_string) = album_string.clone() {
                         unsafe { album_row.set_data("key", album_string); }
@@ -313,7 +348,7 @@ impl Body {
                     });
                     let album_box = gtk::Box::builder().orientation(Vertical).margin_top(8).margin_bottom(8).build();
                     album_row.append(&album_box);
-                    album_box.append(&Label::builder().label(&*or_none_static(album_string)).margin_ellipsized(4)
+                    album_box.append(&Label::builder().label(&*or_none_arc(album_string)).margin_ellipsized(4)
                         .build());
                     let year_builder = Label::builder().margin_start(4).subscript();
                     let count_box = gtk::Box::builder().spacing(4).build();
@@ -337,7 +372,7 @@ impl Body {
             }),
         }
     }
-    pub fn songs(album_string: Option<Rc<String>>, artist_string: Option<Rc<String>>, state: Rc<State>,
+    pub fn songs(album_string: Option<Arc<String>>, artist_string: Option<Arc<String>>, state: Rc<State>,
         now_playing: &Wrapper) -> Self {
         let current_album = get_current_album(artist_string.clone(), album_string.clone(), &mut get_connection());
         Self {
@@ -350,7 +385,7 @@ impl Body {
             body_type: BodyType::Songs,
             query1: album_string.clone(),
             query2: artist_string,
-            title: or_none_static(album_string),
+            title: or_none_arc(album_string),
             subtitle: Rc::new(current_album.len().number_plural(SONG)),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({

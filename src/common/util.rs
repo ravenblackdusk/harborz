@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 use crate::common::constant::NONE;
 
@@ -27,8 +27,8 @@ pub fn or_none(string: &Option<String>) -> &str {
     string.as_deref().unwrap_or(NONE)
 }
 
-pub fn or_none_static(string: Option<Rc<String>>) -> Rc<String> {
-    string.unwrap_or(Rc::new(String::from(NONE)))
+pub fn or_none_arc(string: Option<Arc<String>>) -> Arc<String> {
+    string.unwrap_or(Arc::new(String::from(NONE)))
 }
 
 pub trait Plural: Display {

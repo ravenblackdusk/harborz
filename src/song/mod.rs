@@ -1,6 +1,5 @@
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
@@ -136,7 +135,7 @@ pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<Sqli
     Ok(songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)?)
 }
 
-pub fn get_current_album(artist_string: Option<Rc<String>>, album_string: Option<Rc<String>>,
+pub fn get_current_album(artist_string: Option<Arc<String>>, album_string: Option<Arc<String>>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Vec<(Song, Collection)> {
     let statement = songs.inner_join(collections).order_by((track_number, id)).into_boxed();
     let artist_filtered_statement = if let Some(artist_string) = artist_string {
