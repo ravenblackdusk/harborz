@@ -14,6 +14,7 @@ use crate::body::collection::add_collection_box;
 use crate::body::collection::model::Collection;
 use crate::body::merge::MergeState;
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
+use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
 use crate::common::util::{format, or_none_static, Plural};
 use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
@@ -227,9 +228,8 @@ impl Body {
                     let artist_box = gtk::Box::builder().orientation(Vertical)
                         .margin_start(8).margin_end(4).margin_top(8).margin_bottom(8).build();
                     artist_row.append(&artist_box);
-                    artist_box.append(&Label::builder().label(&*or_none_static(artist_string)).ellipsized().bold()
-                        .build());
-                    let count_box = gtk::Box::builder().spacing(4).build();
+                    artist_box.append(&Label::builder().label(&*or_none_static(artist_string)).ellipsized().build());
+                    let count_box = gtk::Box::builder().spacing(4).name(INSENSITIVE_FG).build();
                     artist_box.append(&count_box);
                     let album_count_box = gtk::Box::builder().spacing(4).build();
                     count_box.append(&album_count_box);
@@ -313,13 +313,13 @@ impl Body {
                     });
                     let album_box = gtk::Box::builder().orientation(Vertical).margin_top(8).margin_bottom(8).build();
                     album_row.append(&album_box);
-                    album_box.append(&Label::builder().label(&*or_none_static(album_string)).margin_ellipsized(4).bold()
+                    album_box.append(&Label::builder().label(&*or_none_static(album_string)).margin_ellipsized(4)
                         .build());
                     let year_builder = Label::builder().margin_start(4).subscript();
                     let count_box = gtk::Box::builder().spacing(4).build();
                     count_box.append(&Label::builder().label(&count.to_string()).subscript().build());
                     count_box.append(&Label::builder().label(count.plural(SONG)).subscript().build());
-                    let info_box = CenterBox::builder().start_widget(
+                    let info_box = CenterBox::builder().name(INSENSITIVE_FG).start_widget(
                         &if let Some(min_year) = min_year {
                             year_builder.label(&if min_year == max_year.unwrap() {
                                 min_year.to_string()
