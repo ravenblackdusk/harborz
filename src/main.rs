@@ -20,7 +20,7 @@ use crate::common::state::State;
 use crate::config::Config;
 use crate::db::get_connection;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
-use crate::schema::bodies::{body_type, navigation_type, query1, query2, scroll_adjustment};
+use crate::schema::bodies::{body_type, navigation_type, params, scroll_adjustment};
 use crate::schema::bodies::dsl::bodies;
 use crate::schema::config::{current_song_position, maximized, window_height, window_width};
 use crate::schema::config::dsl::config as config_table;
@@ -39,14 +39,10 @@ fn main() -> Result<ExitCode> {
     get_connection().run_pending_migrations(MIGRATIONS)?;
     let application = Application::builder().application_id(APP_ID).build();
     application.connect_activate(|application| {
+        let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
         let header_body = gtk::Box::builder().orientation(Vertical).valign(Fill).build();
         let history_bodies = bodies.filter(navigation_type.eq(History)).get_results::<BodyTable>(&mut get_connection())
             .unwrap();
-        let empty_history = history_bodies.is_empty();
-        let config = config_table.get_result::<Config>(&mut get_connection()).unwrap();
-        let window = ApplicationWindow::builder().application(application).content(&header_body)
-            .default_width(config.window_width).default_height(config.window_height).maximized(config.maximized == 1)
-            .build();
         let css_provider = CssProvider::new();
         css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
         #accent-progress progress { background-color: @accent_fg_color; } \
@@ -55,46 +51,46 @@ fn main() -> Result<ExitCode> {
         style_context_add_provider_for_display(&header_body.display(), &css_provider,
             STYLE_PROVIDER_PRIORITY_APPLICATION);
         let window_title = WindowTitle::builder().build();
-        let history: Rc<RefCell<Vec<(Rc<Body>, bool)>>> = Rc::new(RefCell::new(Vec::new()));
-        let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
-        let header_bar = HeaderBar::builder().title_widget(&window_title).build();
-        header_body.append(&header_bar);
-        let body = gtk::Box::builder().orientation(Vertical).build();
-        header_body.append(&body);
-        let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
-        body.append(&scrolled_window);
-        let back_button = Button::builder().icon_name(BACK_ICON).tooltip_text("Home").visible(history_bodies.len() > 1)
-            .build();
-        header_bar.pack_start(&back_button);
-        let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
-            .popover(&Popover::new()).build();
-        header_bar.pack_end(&menu_button);
         let state = Rc::new(State {
-            window,
+            window: ApplicationWindow::builder().application(application).content(&header_body)
+                .default_width(config.window_width).default_height(config.window_height)
+                .maximized(config.maximized == 1).build(),
             header_body,
-            header_bar,
-            back_button,
+            header_bar: HeaderBar::builder().title_widget(&window_title).build(),
+            back_button: Button::builder().icon_name(BACK_ICON).tooltip_text("Home").visible(history_bodies.len() > 1)
+                .build(),
             window_title,
-            menu_button,
-            scrolled_window,
-            history,
+            menu_button: MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
+                .popover(&Popover::new()).build(),
+            scrolled_window: ScrolledWindow::builder().vexpand(true).build(),
+            history: Rc::new(RefCell::new(Vec::new())),
         });
+        state.header_body.append(&state.header_bar);
+        state.header_bar.pack_start(&state.back_button);
+        state.header_bar.pack_end(&state.menu_button);
+        let body = gtk::Box::builder().orientation(Vertical).build();
+        state.header_body.append(&body);
+        body.append(&state.scrolled_window);
+        let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
         let (now_playing_body, wrapper, now_playing)
             = now_playing::create(song_selected_body.clone(), state.clone(), &body);
         body.append(&wrapper);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
             .get_result::<BodyTable>(&mut get_connection()).ok().map(|BodyTable {
-            body_type: body_body_type, query1: body_query1, query2: body_query2, scroll_adjustment: body_scroll_adjustment, ..
+            body_type: body_body_type, params: body_params, scroll_adjustment: body_scroll_adjustment, ..
         }| {
-            let body = Body::from_body_table(body_body_type, body_query1, body_query2, state.clone(), &wrapper);
+            let body = Body::from_body_table(body_body_type,
+                serde_json::from_str::<Vec<Option<String>>>(&body_params).unwrap(), state.clone(), &wrapper);
             body.scroll_adjustment.set(body_scroll_adjustment);
             Rc::new(body)
         });
+        let empty_history = history_bodies.is_empty();
         for BodyTable {
-            body_type: body_body_type, query1: body_query1, query2: body_query2, scroll_adjustment: body_scroll_adjustment, ..
+            body_type: body_body_type, params: body_params, scroll_adjustment: body_scroll_adjustment, ..
         } in history_bodies {
-            Body::from_body_table(body_body_type, body_query1, body_query2, state.clone(), &wrapper)
-                .put_to_history(body_scroll_adjustment, state.history.clone());
+            Body::from_body_table(body_body_type, serde_json::from_str::<Vec<Option<String>>>(&body_params).unwrap(),
+                state.clone(), &wrapper,
+            ).put_to_history(body_scroll_adjustment, state.history.clone());
         }
         if empty_history {
             Rc::new(Body::artists(state.clone(), &wrapper)).set_with_history(state.clone());
@@ -122,11 +118,13 @@ fn main() -> Result<ExitCode> {
                         .chain(song_selected_body.borrow().iter().map(|body| { (body, SongSelected) }))
                         .map(|(body, body_navigation_type)| {
                             let Body {
-                                query1: body_query1, query2: body_query2, body_type: body_body_type,
+                                params: body_params, body_type: body_body_type,
                                 scroll_adjustment: body_scroll_adjustment, ..
                             } = body.deref();
-                            (query1.eq(body_query1.clone().map(|it| { String::from(it.as_str()) })),
-                                query2.eq(body_query2.clone().map(|it| { String::from(it.as_str()) })),
+                            let value: Vec<Option<String>> = (*body_params).iter()
+                                .map(|param| { param.clone().map(|it| { (*it).to_owned() }) }).collect();
+                            (params.eq(
+                                serde_json::to_string(&value).unwrap()),
                                 body_type.eq(body_body_type), scroll_adjustment.eq(body_scroll_adjustment.get()),
                                 navigation_type.eq(body_navigation_type)
                             )

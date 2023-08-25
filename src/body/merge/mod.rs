@@ -58,6 +58,8 @@ pub(in crate::body) struct Entity {
     pub entity_type: EntityType,
 }
 
+pub(in crate::body) const KEY: &'static str = "key";
+
 impl MergeState {
     pub(in crate::body) fn new<G: Fn(Vec<Option<String>>, bool) -> Vec<(Song, Collection)> + Send + Clone + 'static,
         M: Fn(Song, Arc<String>) + Send + Clone + 'static>(merge_entity: Entity, state: Rc<State>, title: Arc<String>,
@@ -96,7 +98,7 @@ impl MergeState {
                 let dialog = MessageDialog::builder().heading(&heading).title(&heading).modal(true)
                     .extra_child(&overlay).transient_for(&state.window).build();
                 let entities = this.selected_for_merge.borrow().iter().map(|entity| {
-                    unsafe { entity.data::<Arc<String>>("key").map(|it| { it.as_ref().clone() }) }
+                    unsafe { entity.data::<Arc<String>>(KEY).map(|it| { it.as_ref().clone() }) }
                 }).collect::<Vec<_>>();
                 let has_none = entities.contains(&None);
                 let entities = entities.into_iter().filter_map(|it| { it }).collect::<Vec<_>>();
@@ -131,8 +133,8 @@ impl MergeState {
                                                 if let NoTag = error.kind {
                                                     Some(Tag::new())
                                                 } else {
-                                                    error!("error reading tags on file {:?} while trying to set {} {}: {}",
-                                                        current_path, string, entity.deref(), error);
+                                                    error!("error reading tags on file [{:?}] while trying to set [{}] \
+                                                    [{}] [{}]", current_path, string, entity.deref(), error);
                                                     None
                                                 }
                                             }

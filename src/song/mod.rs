@@ -137,13 +137,13 @@ pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<Sqli
 pub fn get_current_album(artist_string: Option<impl AsRef<String>>, album_string: Option<impl AsRef<String>>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Vec<(Song, Collection)> {
     let statement = songs.inner_join(collections).order_by((track_number, id)).into_boxed();
-    let artist_filtered_statement = if let Some(artist_string) = artist_string {
-        statement.filter(artist.eq(artist_string.as_ref().to_owned()))
+    let artist_filtered_statement = if let Some(artist_string) = &artist_string {
+        statement.filter(artist.eq(artist_string.as_ref()))
     } else {
         statement.filter(artist.is_null())
     };
-    if let Some(album_string) = album_string {
-        artist_filtered_statement.filter(album.eq(album_string.as_ref().to_owned()))
+    if let Some(album_string) = &album_string {
+        artist_filtered_statement.filter(album.eq(album_string.as_ref()))
     } else {
         artist_filtered_statement.filter(album.is_null())
     }.get_results::<(Song, Collection)>(connection).unwrap()

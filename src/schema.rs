@@ -3,11 +3,10 @@
 diesel::table! {
     bodies (id) {
         id -> Integer,
-        query1 -> Nullable<Text>,
-        query2 -> Nullable<Text>,
         body_type -> crate::body::BodyTypeMapping,
         scroll_adjustment -> Nullable<Float>,
         navigation_type -> crate::body::NavigationTypeMapping,
+        params -> Text,
     }
 }
 

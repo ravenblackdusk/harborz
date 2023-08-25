@@ -99,7 +99,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
             } else {
                 match PLAYBIN.set_state(Playing) {
                     Ok(_) => { play_pause.pause(); }
-                    Err(error) => { warn!("error trying to play {} {}", PLAYBIN.property::<String>(URI), error); }
+                    Err(error) => { warn!("error trying to play [{}] [{}]", PLAYBIN.property::<String>(URI), error); }
                 }
             }
         });
@@ -109,7 +109,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
                 if let Err(error) = PLAYBIN.seek_internal(value as u64, now_playing.clone()) {
-                    warn!("error trying to seek to {} {}", value, error);
+                    warn!("error trying to seek to [{}] [{}]", value, error);
                 }
             }
             Propagation::Stop

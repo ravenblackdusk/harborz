@@ -28,7 +28,7 @@ pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
         .get_result::<(Song, Collection, Config)>(&mut get_connection()) {
         playbin.set_uri(&(&song, &collection).path());
         if let Err(error) = playbin.set_state(Paused) {
-            warn!("error setting playbin state to Paused {}", error);
+            warn!("error setting playbin state to Paused [{}]", error);
         }
     }
     playbin.connect("about-to-finish", true, {
