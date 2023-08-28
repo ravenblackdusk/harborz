@@ -279,7 +279,7 @@ impl Body {
                     albums_box.append(&album_row);
                     albums_box.append(&Separator::builder().build());
                     let cover = join_path(&collection_path.unwrap(), &album_song_path.unwrap()).cover();
-                    album_row.append(Image::builder().pixel_size(38).margin_start(8).build()
+                    album_row.append(Image::builder().pixel_size(46).margin_start(8).build()
                         .set_cover(&cover, ALBUM_ICON));
                     merge_state.clone().handle_click(&album_row, {
                         let album_string = album_string.clone();
@@ -292,7 +292,7 @@ impl Body {
                             )).set_with_history(state.clone());
                         }
                     });
-                    let album_box = gtk::Box::builder().orientation(Vertical).margin_top(8).margin_bottom(8).build();
+                    let album_box = gtk::Box::builder().orientation(Vertical).margin_top(12).margin_bottom(12).build();
                     album_row.append(&album_box);
                     album_box.append(&Label::builder().label(&*or_none_arc(album_string)).margin_ellipsized(4)
                         .build());
@@ -380,7 +380,7 @@ impl Body {
                     grid.attach(&track_number_label, 0, grid_row, 1, 1);
                     grid.attach(&Separator::builder().build(), 0, separator_row, 1, 1);
                     let title_label = Label::builder().label(song.title_str()).ellipsized().bold()
-                        .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
+                        .margin_start(8).margin_end(8).margin_top(12).margin_bottom(12).build();
                     grid.attach(&title_label, 1, grid_row, 1, 1);
                     grid.attach(&Separator::builder().build(), 1, separator_row, 1, 1);
                     let duration_label = Label::builder().label(&format(song.duration as u64)).bold_subscript()

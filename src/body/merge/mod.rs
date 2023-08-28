@@ -208,7 +208,7 @@ impl MergeState {
     }
     fn update_selected_count(&self) {
         let count = self.selected_for_merge.borrow().len();
-        self.state.window_title.set_subtitle(&format!("{} selected for merge", count.number_plural(&self.entity)));
+        self.state.window_title.set_subtitle(&format!("{} selected", count.number_plural(&self.entity)));
         if count > 1 {
             self.merge_button.set_sensitive(true);
             self.merge_button.set_tooltip_text(None);
