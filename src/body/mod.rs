@@ -6,14 +6,14 @@ use std::sync::Arc;
 use adw::gio::{Cancellable, ListStore};
 use adw::prelude::*;
 use adw::WindowTitle;
-use diesel::{BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl, update};
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use diesel::dsl::{count_distinct, count_star, max, min};
 use gtk::{Button, CenterBox, FileDialog, FileFilter, GestureClick, Grid, Image, Label, Separator, Widget};
 use gtk::Orientation::Vertical;
+use id3::TagLike;
 use log::{error, warn};
 use crate::body::collection::add_collection_box;
-use crate::body::collection::model::Collection;
-use crate::body::merge::{Entity, EntityType::*, KEY, MergeState};
+use crate::body::merge::{KEY, MergeState};
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
 use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
@@ -26,7 +26,7 @@ use crate::schema::collections::path;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::{album, artist, id, path as song_path, year};
 use crate::schema::songs::dsl::songs;
-use crate::song::{get_current_album, join_path, Song, WithCover};
+use crate::song::{get_current_album, join_path, WithCover};
 
 pub mod collection;
 mod merge;
@@ -68,7 +68,7 @@ pub struct Body {
 }
 
 fn next_icon() -> Image {
-    Image::builder().icon_name("go-next-symbolic").margin_end(8).build()
+    Image::builder().icon_name("go-next-symbolic").margin_start(2).margin_end(8).build()
 }
 
 fn accent_if_now_playing(label: &Label, row_id: i32, current_song_id: i32) {
@@ -172,16 +172,10 @@ impl Body {
             .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap();
         let title = Arc::new(String::from("Harborz"));
         let subtitle = Rc::new(artists.len().number_plural(ARTIST));
-        let merge_state = MergeState::new(Entity { string: ARTIST, entity_type: Artist }, state.clone(), title.clone(),
-            subtitle.clone(), |artists, has_none| {
-                let in_filter = artist.eq_any(artists);
-                let statement = songs.inner_join(collections).into_boxed();
-                if has_none {
-                    statement.filter(in_filter.or(artist.is_null()))
-                } else {
-                    statement.filter(in_filter)
-                }.get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
-            }, |song, artist_string| {
+        let artists_box = gtk::Box::builder().orientation(Vertical).build();
+        let merge_state = MergeState::new(ARTIST, state.clone(), title.clone(), subtitle.clone(), artists_box.clone(),
+            |artists| { Box::new(artist.eq_any(artists)) }, || { Box::new(artist.is_null()) },
+            |tag, artist_string| { tag.set_artist(artist_string); }, |song, artist_string| {
                 update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string))).execute(&mut get_connection())
                     .unwrap();
             },
@@ -195,7 +189,6 @@ impl Body {
             params: Vec::new(),
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
-                let artists_box = gtk::Box::builder().orientation(Vertical).build();
                 for (artist_string, album_count, song_count) in artists {
                     let artist_string = artist_string.map(Arc::new);
                     let now_playing = now_playing.clone();
@@ -229,7 +222,7 @@ impl Body {
                     song_count_box.append(&Label::builder().label(song_count.plural(SONG)).subscript().build());
                     artist_row.append(&next_icon());
                 }
-                merge_state.handle_pinch(artists_box)
+                merge_state.handle_pinch()
             }),
         }
     }
@@ -245,16 +238,10 @@ impl Body {
             .unwrap();
         let title = or_none_arc(artist_string.clone());
         let subtitle = Rc::new(albums.len().number_plural(ALBUM));
-        let merge_state = MergeState::new(Entity { string: ALBUM, entity_type: Album }, state.clone(), title.clone(),
-            subtitle.clone(), |albums, has_none| {
-                let in_filter = album.eq_any(albums);
-                let statement = songs.inner_join(collections).into_boxed();
-                if has_none {
-                    statement.filter(in_filter.or(album.is_null()))
-                } else {
-                    statement.filter(in_filter)
-                }.get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
-            }, |song, album_string| {
+        let albums_box = gtk::Box::builder().orientation(Vertical).build();
+        let merge_state = MergeState::new(ALBUM, state.clone(), title.clone(), subtitle.clone(), albums_box.clone(),
+            |albums| { Box::new(album.eq_any(albums)) }, || { Box::new(album.is_null()) },
+            |tag, album_string| { tag.set_album(album_string); }, |song, album_string| {
                 update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string))).execute(&mut get_connection())
                     .unwrap();
             },
@@ -268,7 +255,6 @@ impl Body {
             params: vec![artist_string.clone()],
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
-                let albums_box = gtk::Box::builder().orientation(Vertical).build();
                 for (album_string, count, collection_path, album_song_path, min_year, max_year) in albums {
                     let now_playing = now_playing.clone();
                     let album_string = album_string.map(Arc::new);
@@ -314,7 +300,7 @@ impl Body {
                     album_box.append(&info_box);
                     album_row.append(&next_icon());
                 }
-                merge_state.handle_pinch(albums_box)
+                merge_state.handle_pinch()
             }),
         }
     }
