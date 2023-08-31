@@ -182,8 +182,8 @@ impl Body {
                     statement.filter(in_filter)
                 }.get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
             }, |song, artist_string| {
-                update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string.to_string())))
-                    .execute(&mut get_connection()).unwrap();
+                update(songs.filter(id.eq(song.id))).set(artist.eq(Some(artist_string))).execute(&mut get_connection())
+                    .unwrap();
             },
         );
         Self {
@@ -255,8 +255,8 @@ impl Body {
                     statement.filter(in_filter)
                 }.get_results::<(Song, Collection)>(&mut get_connection()).unwrap()
             }, |song, album_string| {
-                update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string.to_string())))
-                    .execute(&mut get_connection()).unwrap();
+                update(songs.filter(id.eq(song.id))).set(album.eq(Some(album_string))).execute(&mut get_connection())
+                    .unwrap();
             },
         );
         Self {
