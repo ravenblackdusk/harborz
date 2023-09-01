@@ -72,15 +72,15 @@ fn main() -> Result<ExitCode> {
         state.header_body.append(&body);
         body.append(&state.scrolled_window);
         let song_selected_body: Rc<RefCell<Option<Rc<Body>>>> = Rc::new(RefCell::new(None));
-        let (now_playing_body, wrapper, now_playing)
+        let (now_playing_body, bottom_widget, now_playing)
             = now_playing::create(song_selected_body.clone(), state.clone(), &body);
-        body.append(&wrapper);
+        body.append(&bottom_widget);
         *song_selected_body.borrow_mut() = bodies.filter(navigation_type.eq(SongSelected)).limit(1)
             .get_result::<BodyTable>(&mut get_connection()).ok().map(|BodyTable {
             body_type: body_body_type, params: body_params, scroll_adjustment: body_scroll_adjustment, ..
         }| {
             let body = Body::from_body_table(body_body_type,
-                serde_json::from_str::<Vec<Option<String>>>(&body_params).unwrap(), state.clone(), &wrapper);
+                serde_json::from_str::<Vec<Option<String>>>(&body_params).unwrap(), state.clone());
             body.scroll_adjustment.set(body_scroll_adjustment);
             Rc::new(body)
         });
@@ -89,11 +89,11 @@ fn main() -> Result<ExitCode> {
             body_type: body_body_type, params: body_params, scroll_adjustment: body_scroll_adjustment, ..
         } in history_bodies {
             Body::from_body_table(body_body_type, serde_json::from_str::<Vec<Option<String>>>(&body_params).unwrap(),
-                state.clone(), &wrapper,
+                state.clone(),
             ).put_to_history(body_scroll_adjustment, state.history.clone());
         }
         if empty_history {
-            Rc::new(Body::artists(state.clone(), &wrapper)).set_with_history(state.clone());
+            Rc::new(Body::artists(state.clone())).set_with_history(state.clone());
         } else if let Some((body, _)) = state.history.borrow().last() {
             body.clone().set(state.clone());
         }

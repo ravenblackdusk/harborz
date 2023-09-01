@@ -17,12 +17,11 @@ use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use crate::body::Body;
 use crate::body::collection::model::Collection;
-use crate::common::action::SONG_SELECTED;
+use crate::common::action::{SONG_SELECTED, WIN_STREAM_STARTED};
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::BACK_ICON;
 use crate::common::state::State;
 use crate::common::util::or_none;
-use crate::common::wrapper::{STREAM_STARTED, Wrapper};
 use crate::config::{Config, update_now_playing_body_realized};
 use crate::db::get_connection;
 use crate::now_playing::mpris::mpris_player;
@@ -44,7 +43,7 @@ mod bottom_widget;
 mod body;
 
 pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State>, body: &gtk::Box)
-    -> (gtk::Box, Wrapper, Rc<RefCell<NowPlaying>>) {
+    -> (gtk::Box, gtk::Box, Rc<RefCell<NowPlaying>>) {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
     let (now_playing_body, body_skip_song_gesture) = body::create(now_playing.clone());
     let (bottom_widget, bottom_skip_song_gesture, image_click)
@@ -67,15 +66,13 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
             update_now_playing_body_realized(true);
         }
     });
-    let wrapper = Wrapper::new(&bottom_widget);
     state.back_button.connect_clicked({
         let now_playing = now_playing.clone();
         let state = state.clone();
         let body = body.clone();
-        let wrapper = wrapper.clone();
         move |back_button| {
             if state.history.borrow().is_empty() {
-                Rc::new(Body::artists(state.clone(), &wrapper)).set_with_history(state.clone());
+                Rc::new(Body::artists(state.clone())).set_with_history(state.clone());
             } else {
                 let mut history = state.history.borrow_mut();
                 if back_button.icon_name().unwrap() == BACK_ICON {
@@ -159,7 +156,6 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
     forget(PLAYBIN.bus().unwrap().add_watch_local({
         let now_playing = now_playing.clone();
         let state = state.clone();
-        let wrapper = wrapper.clone();
         move |_, message| {
             if message.src().map(|it| { it.name().starts_with("playbin3") }).unwrap_or(false) {
                 match message.view() {
@@ -209,7 +205,8 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
                             now_playing.borrow_mut().set_song_info(&title, or_none(&song.artist), &state.window_title);
                             let cover = (&song, &collection).path().cover();
                             let art_url = now_playing.borrow_mut().set_album_image(cover);
-                            wrapper.emit_by_name::<()>(STREAM_STARTED, &[&song.id]);
+                            now_playing.borrow().bottom_song
+                                .activate_action(&WIN_STREAM_STARTED, Some(&song.id.to_variant())).unwrap();
                             mpris_player.set_metadata(Metadata {
                                 length: Some(song.duration),
                                 art_url,
@@ -232,5 +229,5 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
             Continue
         }
     }).unwrap());
-    (now_playing_body, wrapper, now_playing)
+    (now_playing_body, bottom_widget, now_playing)
 }

@@ -1,9 +1,10 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::fs::hard_link;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
-use adw::gio::{Cancellable, ListStore};
+use adw::gio::{Cancellable, ListStore, SimpleAction};
 use adw::prelude::*;
 use adw::WindowTitle;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
@@ -15,11 +16,10 @@ use log::{error, warn};
 use crate::body::collection::add_collection_box;
 use crate::body::merge::{KEY, MergeState};
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
-use crate::common::action::WIN_SONG_SELECTED;
+use crate::common::action::{STREAM_STARTED, WIN_SONG_SELECTED};
 use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
 use crate::common::util::{format, or_none_arc, Plural};
-use crate::common::wrapper::{STREAM_STARTED, Wrapper};
 use crate::config::Config;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
@@ -72,24 +72,6 @@ fn next_icon() -> Image {
     Image::builder().icon_name("go-next-symbolic").margin_start(2).margin_end(8).build()
 }
 
-fn accent_if_now_playing(label: &Label, row_id: i32, current_song_id: i32) {
-    if row_id == current_song_id {
-        label.add_css_class("accent");
-    } else {
-        label.remove_css_class("accent");
-    }
-}
-
-fn connect_accent_if_now_playing(song_id: i32, current_song_id: Option<i32>, label: Label, wrapper: &Wrapper) {
-    if let Some(current_song_id) = current_song_id {
-        accent_if_now_playing(&label, song_id, current_song_id);
-    }
-    wrapper.connect_local(STREAM_STARTED, true, move |params| {
-        accent_if_now_playing(&label, song_id, params[1].get::<i32>().unwrap());
-        None
-    });
-}
-
 trait Castable {
     fn first_child(self) -> Option<Widget>;
     fn set_label(self, label: &str) -> Label;
@@ -122,13 +104,12 @@ impl Body {
         window_title.set_title(&self.title);
         window_title.set_subtitle(&self.subtitle);
     }
-    pub fn from_body_table(body_type: BodyType, params: Vec<Option<String>>, state: Rc<State>, now_playing: &Wrapper)
-        -> Self {
+    pub fn from_body_table(body_type: BodyType, params: Vec<Option<String>>, state: Rc<State>) -> Self {
         let params = params.into_iter().map(|it| { it.map(Arc::new) }).collect();
         match body_type {
-            BodyType::Artists => { Body::artists(state, now_playing) }
-            BodyType::Albums => { Body::albums(params, state, now_playing) }
-            BodyType::Songs => { Body::songs(params, state, now_playing) }
+            BodyType::Artists => { Body::artists(state) }
+            BodyType::Albums => { Body::albums(params, state) }
+            BodyType::Songs => { Body::songs(params, state) }
             BodyType::Collections => { Body::collections(state) }
         }
     }
@@ -168,7 +149,7 @@ impl Body {
             widget: Box::new(add_collection_box(state)),
         }
     }
-    pub fn artists(state: Rc<State>, now_playing: &Wrapper) -> Self {
+    pub fn artists(state: Rc<State>) -> Self {
         let artists = songs.group_by(artist).select((artist, count_distinct(album), count_star()))
             .get_results::<(Option<String>, i64, i64)>(&mut get_connection()).unwrap();
         let title = Arc::new(String::from("Harborz"));
@@ -192,7 +173,6 @@ impl Body {
             widget: Box::new({
                 for (artist_string, album_count, song_count) in artists {
                     let artist_string = artist_string.map(Arc::new);
-                    let now_playing = now_playing.clone();
                     let artist_row = gtk::Box::builder().spacing(8).build();
                     if let Some(artist_string) = artist_string.clone() {
                         unsafe { artist_row.set_data(KEY, artist_string); }
@@ -203,7 +183,7 @@ impl Body {
                         let artist_string = artist_string.clone();
                         let state = state.clone();
                         move || {
-                            Rc::new(Self::albums(vec![artist_string.clone()], state.clone(), &now_playing))
+                            Rc::new(Self::albums(vec![artist_string.clone()], state.clone()))
                                 .set_with_history(state.clone());
                         }
                     });
@@ -227,7 +207,7 @@ impl Body {
             }),
         }
     }
-    pub fn albums(mut params: Vec<Option<Arc<String>>>, state: Rc<State>, now_playing: &Wrapper) -> Self {
+    pub fn albums(mut params: Vec<Option<Arc<String>>>, state: Rc<State>) -> Self {
         let statement = songs.inner_join(collections).group_by(album).order_by(min(year).desc())
             .select((album, count_star(), min(path), min(song_path), min(year), max(year))).into_boxed();
         let artist_string = params.pop().unwrap();
@@ -257,7 +237,6 @@ impl Body {
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 for (album_string, count, collection_path, album_song_path, min_year, max_year) in albums {
-                    let now_playing = now_playing.clone();
                     let album_string = album_string.map(Arc::new);
                     let album_row = gtk::Box::builder().spacing(8).build();
                     if let Some(album_string) = album_string.clone() {
@@ -275,7 +254,7 @@ impl Body {
                         move || {
                             Rc::new(Self::songs(
                                 vec![cover.to_str().map(|it| { Arc::new(String::from(it)) }), artist_string.clone(),
-                                    album_string.clone()], state.clone(), &now_playing,
+                                    album_string.clone()], state.clone(),
                             )).set_with_history(state.clone());
                         }
                     });
@@ -305,7 +284,7 @@ impl Body {
             }),
         }
     }
-    pub fn songs(mut params: Vec<Option<Arc<String>>>, state: Rc<State>, now_playing: &Wrapper) -> Self {
+    pub fn songs(mut params: Vec<Option<Arc<String>>>, state: Rc<State>) -> Self {
         let album_string = params.pop().unwrap();
         let artist_string = params.pop().unwrap();
         let cover = params.pop().unwrap();
@@ -354,8 +333,9 @@ impl Body {
             scroll_adjustment: Cell::new(None),
             widget: Box::new({
                 let Config { current_song_id, .. } = config.get_result::<Config>(&mut get_connection()).unwrap();
+                let current_song_id = Cell::new(current_song_id);
                 let grid = Grid::new();
-                for (row, (song, collection)) in current_album.into_iter().enumerate() {
+                let song_id_to_labels = current_album.into_iter().enumerate().map(|(row, (song, collection))| {
                     let grid_row = (2 * row) as i32;
                     let separator_row = grid_row + 1;
                     let track_number_builder = Label::builder().bold().margin_start(8).margin_end(8);
@@ -376,7 +356,8 @@ impl Body {
                     grid.attach(&Separator::builder().build(), 2, separator_row, 1, 1);
                     let collection_path_rc = Rc::new(collection.path);
                     let song_path_rc = Rc::new(song.path);
-                    let handle_click = |label: &Label| {
+                    let labels = vec![track_number_label, title_label, duration_label];
+                    for label in &labels {
                         let gesture_click = GestureClick::new();
                         gesture_click.connect_released({
                             let label = label.clone();
@@ -388,14 +369,29 @@ impl Body {
                             }
                         });
                         label.add_controller(gesture_click);
-                    };
-                    handle_click(&track_number_label);
-                    connect_accent_if_now_playing(song.id, current_song_id, track_number_label, now_playing);
-                    handle_click(&title_label);
-                    connect_accent_if_now_playing(song.id, current_song_id, title_label, now_playing);
-                    handle_click(&duration_label);
-                    connect_accent_if_now_playing(song.id, current_song_id, duration_label, now_playing);
-                }
+                    }
+                    (song.id, labels)
+                }).collect::<HashMap<_, _>>();
+                let stream_started = SimpleAction::new(STREAM_STARTED, Some(&i32::static_variant_type()));
+                state.window.add_action(&stream_started);
+                stream_started.connect_activate(move |_, params| {
+                    let started_song_id = params.unwrap().get::<i32>().unwrap();
+                    if let Some(labels) = song_id_to_labels.get(&started_song_id) {
+                        for label in labels {
+                            label.add_css_class("accent");
+                        }
+                        if let Some(current_id) = current_song_id.get() {
+                            if current_id != started_song_id {
+                                current_song_id.set(Some(started_song_id));
+                                if let Some(labels) = song_id_to_labels.get(&current_id) {
+                                    for label in labels {
+                                        label.remove_css_class("accent");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
                 grid
             }),
         }

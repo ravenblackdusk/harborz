@@ -9,7 +9,6 @@ use gtk::builders::{BoxBuilder, LabelBuilder};
 use crate::common::constant::ACCENT_BG;
 
 pub mod util;
-pub mod wrapper;
 pub mod constant;
 pub mod state;
 pub mod action;

@@ -151,7 +151,7 @@ impl MergeState {
                     let this = this.clone();
                     let dialog = dialog.clone();
                     move |_| {
-                        let entity = action.state().unwrap().str().unwrap();
+                        let variant = action.state().unwrap();
                         let progress_bar = ProgressBar::builder().hexpand(true).build().osd();
                         overlay.add_overlay(&progress_bar);
                         let (sender, receiver) = channel::<f64>();
@@ -162,6 +162,7 @@ impl MergeState {
                             let set_tag = set_tag.clone();
                             let merge = merge.clone();
                             move || {
+                                let entity = variant.str().unwrap();
                                 let in_filter = get_in_filter(entities.iter().filter_map(|it| {
                                     (**it != entity).then_some(Some((**it).to_owned()))
                                 }).collect::<Vec<_>>());
