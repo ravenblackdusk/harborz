@@ -245,7 +245,7 @@ impl MergeState {
             self.state.header_bar.pack_start(&self.cancel_button);
             self.state.header_bar.remove(&self.state.menu_button);
             self.state.header_bar.pack_end(&self.merge_button);
-            self.state.window_title.set_title(&format!("Merging {}s", self.entity));
+            self.state.window_actions.change_window_title.activate(format!("Merging {}s", self.entity));
             self.update_selected_count();
             self.iterate_rows(|row| {
                 row.remove(&row.last_child().unwrap());
@@ -259,8 +259,8 @@ impl MergeState {
         self.state.header_bar.pack_start(&self.state.back_button);
         self.state.header_bar.remove(&self.merge_button);
         self.state.header_bar.pack_end(&self.state.menu_button);
-        self.state.window_title.set_title(&self.title);
-        self.state.window_title.set_subtitle(&self.subtitle);
+        self.state.window_actions.change_window_title.activate(&*self.title);
+        self.state.window_actions.change_window_subtitle.activate(&*self.subtitle);
         self.selected_for_merge.borrow_mut().clear();
         self.merging.set(false);
         self.iterate_rows(|row| {
@@ -271,7 +271,8 @@ impl MergeState {
     }
     fn update_selected_count(&self) {
         let count = self.selected_for_merge.borrow().len();
-        self.state.window_title.set_subtitle(&format!("{} selected", count.number_plural(&self.entity)));
+        self.state.window_actions.change_window_subtitle
+            .activate(format!("{} selected", count.number_plural(&self.entity)));
         if count > 1 {
             self.merge_button.set_sensitive(true);
             self.merge_button.set_tooltip_text(None);

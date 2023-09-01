@@ -4,9 +4,8 @@ use std::fs::hard_link;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
-use adw::gio::{Cancellable, ListStore, SimpleAction};
+use adw::gio::{Cancellable, ListStore};
 use adw::prelude::*;
-use adw::WindowTitle;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use diesel::dsl::{count_distinct, count_star, max, min};
 use gtk::{Button, CenterBox, FileDialog, FileFilter, GestureClick, Grid, Image, Label, Separator, Widget};
@@ -16,7 +15,6 @@ use log::{error, warn};
 use crate::body::collection::add_collection_box;
 use crate::body::merge::{KEY, MergeState};
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
-use crate::common::action::{STREAM_STARTED, WIN_SONG_SELECTED};
 use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
 use crate::common::util::{format, or_none_arc, Plural};
@@ -100,10 +98,6 @@ fn popover_box(state: Rc<State>, merge_state: Rc<MergeState>) -> gtk::Box {
 }
 
 impl Body {
-    pub fn set_window_title(&self, window_title: &WindowTitle) {
-        window_title.set_title(&self.title);
-        window_title.set_subtitle(&self.subtitle);
-    }
     pub fn from_body_table(body_type: BodyType, params: Vec<Option<String>>, state: Rc<State>) -> Self {
         let params = params.into_iter().map(|it| { it.map(Arc::new) }).collect();
         match body_type {
@@ -119,7 +113,8 @@ impl Body {
     }
     pub fn set(self: Rc<Self>, state: Rc<State>) {
         state.back_button.set_visible(self.back_visible);
-        self.set_window_title(&state.window_title);
+        state.window_actions.change_window_title.activate(&*self.title);
+        state.window_actions.change_window_subtitle.activate(&*self.subtitle);
         state.menu_button.set_visible(if self.popover_box.first_child() == None {
             false
         } else {
@@ -360,21 +355,19 @@ impl Body {
                     for label in &labels {
                         let gesture_click = GestureClick::new();
                         gesture_click.connect_released({
-                            let label = label.clone();
+                            let state = state.clone();
                             let collection_path_rc = collection_path_rc.clone();
                             let song_path_rc = song_path_rc.clone();
                             move |_, _, _, _| {
-                                label.activate_action(&WIN_SONG_SELECTED, Some(&join_path(&*collection_path_rc,
-                                    &*song_path_rc).to_str().unwrap().to_variant())).unwrap();
+                                state.window_actions.song_selected.activate(join_path(&*collection_path_rc,
+                                    &*song_path_rc).to_str().unwrap());
                             }
                         });
                         label.add_controller(gesture_click);
                     }
                     (song.id, labels)
                 }).collect::<HashMap<_, _>>();
-                let stream_started = SimpleAction::new(STREAM_STARTED, Some(&i32::static_variant_type()));
-                state.window.add_action(&stream_started);
-                stream_started.connect_activate(move |_, params| {
+                state.window_actions.stream_started.action.connect_activate(move |_, params| {
                     let started_song_id = params.unwrap().get::<i32>().unwrap();
                     if let Some(labels) = song_id_to_labels.get(&started_song_id) {
                         for label in labels {

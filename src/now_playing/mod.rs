@@ -4,7 +4,6 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
-use adw::gio::SimpleAction;
 use adw::glib::Propagation;
 use adw::prelude::*;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
@@ -17,7 +16,6 @@ use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use crate::body::Body;
 use crate::body::collection::model::Collection;
-use crate::common::action::{SONG_SELECTED, WIN_STREAM_STARTED};
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::BACK_ICON;
 use crate::common::state::State;
@@ -136,9 +134,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
     });
     let tracking_position = Rc::new(Cell::new(false));
     let once = Once::new();
-    let song_selected = SimpleAction::new(SONG_SELECTED, Some(&String::static_variant_type()));
-    state.window.add_action(&song_selected);
-    song_selected.connect_activate({
+    state.window_actions.song_selected.action.connect_activate({
         let now_playing = now_playing.clone();
         let state = state.clone();
         move |_, params| {
@@ -202,11 +198,10 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
                                 .get_result::<(Collection, Song)>(connection)?;
                             update(config).set(current_song_id.eq(song.id)).execute(connection)?;
                             let title = song.title_str().to_owned();
-                            now_playing.borrow_mut().set_song_info(&title, or_none(&song.artist), &state.window_title);
+                            now_playing.borrow_mut().set_song_info(state.clone(), &title, or_none(&song.artist));
                             let cover = (&song, &collection).path().cover();
                             let art_url = now_playing.borrow_mut().set_album_image(cover);
-                            now_playing.borrow().bottom_song
-                                .activate_action(&WIN_STREAM_STARTED, Some(&song.id.to_variant())).unwrap();
+                            state.window_actions.stream_started.activate(song.id);
                             mpris_player.set_metadata(Metadata {
                                 length: Some(song.duration),
                                 art_url,

@@ -17,6 +17,7 @@ use crate::body::NavigationType::SongSelected;
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::{APP_ID, BACK_ICON};
 use crate::common::state::State;
+use crate::common::window_action::WindowActions;
 use crate::config::Config;
 use crate::db::get_connection;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
@@ -51,19 +52,30 @@ fn main() -> Result<ExitCode> {
         style_context_add_provider_for_display(&header_body.display(), &css_provider,
             STYLE_PROVIDER_PRIORITY_APPLICATION);
         let window_title = WindowTitle::builder().build();
+        let window = ApplicationWindow::builder().application(application).content(&header_body)
+            .default_width(config.window_width).default_height(config.window_height)
+            .maximized(config.maximized == 1).build();
+        let window_actions = WindowActions::new(&window);
         let state = Rc::new(State {
-            window: ApplicationWindow::builder().application(application).content(&header_body)
-                .default_width(config.window_width).default_height(config.window_height)
-                .maximized(config.maximized == 1).build(),
+            window,
             header_body,
             header_bar: HeaderBar::builder().title_widget(&window_title).build(),
             back_button: Button::builder().icon_name(BACK_ICON).tooltip_text("Home").visible(history_bodies.len() > 1)
                 .build(),
-            window_title,
+            window_actions,
             menu_button: MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
                 .popover(&Popover::new()).build(),
             scrolled_window: ScrolledWindow::builder().vexpand(true).build(),
             history: Rc::new(RefCell::new(Vec::new())),
+        });
+        state.window_actions.change_window_title.action.connect_activate({
+            let window_title = window_title.clone();
+            move |_, variant| {
+                window_title.set_title(variant.unwrap().str().unwrap());
+            }
+        });
+        state.window_actions.change_window_subtitle.action.connect_activate(move |_, variant| {
+            window_title.set_subtitle(variant.unwrap().str().unwrap());
         });
         state.header_body.append(&state.header_bar);
         state.header_bar.pack_start(&state.back_button);
