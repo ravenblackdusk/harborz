@@ -3,7 +3,6 @@ use gtk::Widget;
 
 mod imp;
 
-pub const SONG_SELECTED: &'static str = "song-selected";
 pub const STREAM_STARTED: &'static str = "stream-started";
 
 glib::wrapper! {

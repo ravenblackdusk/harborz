@@ -15,10 +15,11 @@ use log::{error, warn};
 use crate::body::collection::add_collection_box;
 use crate::body::merge::{KEY, MergeState};
 use crate::common::{AdjustableScrolledWindow, ALBUM_ICON, ImagePathBuf, StyledLabelBuilder};
+use crate::common::action::WIN_SONG_SELECTED;
 use crate::common::constant::INSENSITIVE_FG;
 use crate::common::state::State;
 use crate::common::util::{format, or_none_arc, Plural};
-use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
+use crate::common::wrapper::{STREAM_STARTED, Wrapper};
 use crate::config::Config;
 use crate::db::get_connection;
 use crate::schema::collections::dsl::collections;
@@ -373,16 +374,17 @@ impl Body {
                         .margin_start(8).margin_end(8).build();
                     grid.attach(&duration_label, 2, grid_row, 1, 1);
                     grid.attach(&Separator::builder().build(), 2, separator_row, 1, 1);
-                    let song_path_rc = Rc::new(song.path);
                     let collection_path_rc = Rc::new(collection.path);
+                    let song_path_rc = Rc::new(song.path);
                     let handle_click = |label: &Label| {
                         let gesture_click = GestureClick::new();
                         gesture_click.connect_released({
-                            let now_playing = now_playing.clone();
-                            let song_path_rc = song_path_rc.clone();
+                            let label = label.clone();
                             let collection_path_rc = collection_path_rc.clone();
+                            let song_path_rc = song_path_rc.clone();
                             move |_, _, _, _| {
-                                now_playing.emit_by_name::<()>(SONG_SELECTED, &[&*song_path_rc, &*collection_path_rc]);
+                                label.activate_action(&WIN_SONG_SELECTED, Some(&join_path(&*collection_path_rc,
+                                    &*song_path_rc).to_str().unwrap().to_variant())).unwrap();
                             }
                         });
                         label.add_controller(gesture_click);

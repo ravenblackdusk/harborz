@@ -69,7 +69,7 @@ impl MergeState {
         let entity = entity.deref();
         let check_button = CheckButton::builder().label(entity)
             .action_name(format!("{}.{}", MERGE_DIALOG, CHOOSE_CORRECT_ENTITY))
-            .action_target(&Some(entity.as_str()).to_variant()).build();
+            .action_target(&entity.to_variant()).build();
         gtk_box.append(&check_button);
         check_button
     }
@@ -131,8 +131,8 @@ impl MergeState {
                 button_box.append(&merge_button);
                 let action_group = SimpleActionGroup::new();
                 dialog.insert_action_group(MERGE_DIALOG, Some(&action_group));
-                let action = SimpleAction::new_stateful(CHOOSE_CORRECT_ENTITY,
-                    Some(&Option::<String>::static_variant_type()), &None::<String>.to_variant());
+                let action = SimpleAction::new_stateful(CHOOSE_CORRECT_ENTITY, Some(&String::static_variant_type()),
+                    &"".to_variant());
                 action_group.add_action(&action);
                 action.connect_activate({
                     let merge_button = merge_button.clone();
@@ -151,7 +151,7 @@ impl MergeState {
                     let this = this.clone();
                     let dialog = dialog.clone();
                     move |_| {
-                        let entity = action.state().unwrap().get::<Option<String>>().unwrap().unwrap();
+                        let entity = action.state().unwrap().str().unwrap();
                         let progress_bar = ProgressBar::builder().hexpand(true).build().osd();
                         overlay.add_overlay(&progress_bar);
                         let (sender, receiver) = channel::<f64>();

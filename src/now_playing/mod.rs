@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
+use adw::gio::SimpleAction;
 use adw::glib::Propagation;
 use adw::prelude::*;
 use diesel::{Connection, ExpressionMethods, QueryDsl, RunQueryDsl, TextExpressionMethods, update};
@@ -16,11 +17,12 @@ use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
 use crate::body::Body;
 use crate::body::collection::model::Collection;
+use crate::common::action::SONG_SELECTED;
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::BACK_ICON;
 use crate::common::state::State;
 use crate::common::util::or_none;
-use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED, Wrapper};
+use crate::common::wrapper::{STREAM_STARTED, Wrapper};
 use crate::config::{Config, update_now_playing_body_realized};
 use crate::db::get_connection;
 use crate::now_playing::mpris::mpris_player;
@@ -32,7 +34,7 @@ use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::path as song_path;
-use crate::song::{get_current_song, join_path, Song, WithCover};
+use crate::song::{get_current_song, Song, WithCover};
 use crate::song::WithPath;
 
 pub mod playbin;
@@ -137,23 +139,21 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
     });
     let tracking_position = Rc::new(Cell::new(false));
     let once = Once::new();
-    wrapper.connect_local(SONG_SELECTED, true, {
+    let song_selected = SimpleAction::new(SONG_SELECTED, Some(&String::static_variant_type()));
+    state.window.add_action(&song_selected);
+    song_selected.connect_activate({
         let now_playing = now_playing.clone();
         let state = state.clone();
-        move |params| {
-            if let [_, current_song_path, collection_path] = &params {
-                let playing = PLAYBIN.current_state() == Playing;
-                PLAYBIN.set_state(Null).unwrap();
-                PLAYBIN.set_uri(&join_path(&collection_path.get::<String>().unwrap(),
-                    &current_song_path.get::<String>().unwrap()));
-                if playing {
-                    PLAYBIN.set_state(Playing).unwrap();
-                } else {
-                    now_playing.borrow().click_play_pause();
-                }
-                *song_selected_body.borrow_mut() = state.history.borrow().last().map(|(body, _)| { body }).cloned();
+        move |_, params| {
+            let playing = PLAYBIN.current_state() == Playing;
+            PLAYBIN.set_state(Null).unwrap();
+            PLAYBIN.set_uri_str(params.unwrap().str().unwrap());
+            if playing {
+                PLAYBIN.set_state(Playing).unwrap();
+            } else {
+                now_playing.borrow().click_play_pause();
             }
-            None
+            *song_selected_body.borrow_mut() = state.history.borrow().last().map(|(body, _)| { body }).cloned();
         }
     });
     forget(PLAYBIN.bus().unwrap().add_watch_local({

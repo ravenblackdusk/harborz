@@ -42,6 +42,7 @@ pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
 });
 
 pub trait Playbin {
+    fn set_uri_str(&self, uri: &str);
     fn set_uri(&self, uri: &PathBuf);
     fn get_position(&self) -> Option<u64>;
     fn seek_internal(&self, value: u64, now_playing: Rc<RefCell<NowPlaying>>) -> anyhow::Result<()>;
@@ -50,8 +51,11 @@ pub trait Playbin {
 }
 
 impl Playbin for Pipeline {
+    fn set_uri_str(&self, uri: &str) {
+        self.set_property(URI, format!("file:{}", uri));
+    }
     fn set_uri(&self, uri: &PathBuf) {
-        self.set_property(URI, format!("file:{}", uri.to_str().unwrap()));
+        self.set_uri_str(uri.to_str().unwrap());
     }
     fn get_position(&self) -> Option<u64> {
         PLAYBIN.query_position().map(ClockTime::nseconds)

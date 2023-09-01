@@ -6,7 +6,7 @@ use adw::subclass::prelude::*;
 use gtk::*;
 use gtk::Widget;
 use once_cell::sync::Lazy;
-use crate::common::wrapper::{SONG_SELECTED, STREAM_STARTED};
+use crate::common::wrapper::STREAM_STARTED;
 
 #[derive(Debug, Default, Properties)]
 #[properties(wrapper_type = super::Wrapper)]
@@ -36,10 +36,7 @@ impl ObjectSubclass for Wrapper {
 }
 
 static SIGNALS: Lazy<Vec<Signal>> = Lazy::new(|| {
-    vec![
-        Signal::builder(SONG_SELECTED).param_types([String::static_type(), String::static_type()]).build(),
-        Signal::builder(STREAM_STARTED).param_types([i32::static_type()]).build(),
-    ]
+    vec![Signal::builder(STREAM_STARTED).param_types([i32::static_type()]).build()]
 });
 
 impl ObjectImpl for Wrapper {
