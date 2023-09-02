@@ -18,6 +18,7 @@ use crate::body::Body;
 use crate::body::collection::model::Collection;
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::BACK_ICON;
+use crate::common::gesture::{Direction, DirectionSwipe};
 use crate::common::state::State;
 use crate::common::util::or_none;
 use crate::config::{Config, update_now_playing_body_realized};
@@ -40,50 +41,86 @@ mod now_playing;
 mod bottom_widget;
 mod body;
 
+fn go_delta_song(velocity_x: f64) {
+    PLAYBIN.go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
+}
+
 pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State>, body: &gtk::Box)
     -> (gtk::Box, gtk::Box, Rc<RefCell<NowPlaying>>) {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
-    let (now_playing_body, body_skip_song_gesture) = body::create(now_playing.clone());
-    let (bottom_widget, bottom_skip_song_gesture, image_click)
+    let (now_playing_body, body_swipe_gesture) = body::create(now_playing.clone());
+    let (bottom_widget, bottom_swipe_gesture, image_click)
         = bottom_widget::create(now_playing.clone(), song_selected_body.clone(), state.clone());
-    for skip_song_gesture in vec![body_skip_song_gesture, bottom_skip_song_gesture] {
-        skip_song_gesture.connect_swipe(|gesture, velocity_x, velocity_y| {
-            if velocity_x.abs() * 0.1 > velocity_y.abs() {
-                gesture.set_state(EventSequenceState::Claimed);
-                PLAYBIN.go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
-            }
-        });
-    }
-    image_click.connect_released({
-        let now_playing = now_playing.clone();
-        let state = state.clone();
-        let now_playing_body = now_playing_body.clone();
-        move |gesture, _, _, _| {
-            gesture.set_state(EventSequenceState::Claimed);
-            now_playing.borrow().realize_body(state.clone(), &now_playing_body);
-            update_now_playing_body_realized(true);
-        }
-    });
-    state.back_button.connect_clicked({
+    let realize_bottom = {
         let now_playing = now_playing.clone();
         let state = state.clone();
         let body = body.clone();
+        move || {
+            update_now_playing_body_realized(false);
+            now_playing.borrow().update_other(state.clone(), BACK_ICON, &body);
+        }
+    };
+    let show_last_history = {
+        let state = state.clone();
+        move || {
+            if let Some((body, adjust_scroll)) = state.history.borrow().last() {
+                body.clone().set(state.clone());
+                let Body { scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
+                if *adjust_scroll { state.scrolled_window.adjust(&body_scroll_adjustment); }
+            }
+        }
+    };
+    body_swipe_gesture.connect_direction_swipe({
+        let realize_bottom = realize_bottom.clone();
+        let show_last_history = show_last_history.clone();
+        move |gesture, velocity_x, velocity_y, direction_swipe| {
+            if direction_swipe(Direction::Horizontal) {
+                gesture.set_state(EventSequenceState::Claimed);
+                go_delta_song(velocity_x);
+            } else if velocity_y > 0.0 && direction_swipe(Direction::Vertical) {
+                gesture.set_state(EventSequenceState::Claimed);
+                realize_bottom();
+                show_last_history();
+            }
+        }
+    });
+    let realize_body = {
+        let now_playing = now_playing.clone();
+        let state = state.clone();
+        let now_playing_body = now_playing_body.clone();
+        move || {
+            now_playing.borrow().realize_body(state.clone(), &now_playing_body);
+            update_now_playing_body_realized(true);
+        }
+    };
+    bottom_swipe_gesture.connect_direction_swipe({
+        let realize_body = realize_body.clone();
+        move |gesture, velocity_x, velocity_y, direction_swipe| {
+            if direction_swipe(Direction::Horizontal) {
+                gesture.set_state(EventSequenceState::Claimed);
+                go_delta_song(velocity_x);
+            } else if velocity_y < 0.0 && direction_swipe(Direction::Vertical) {
+                gesture.set_state(EventSequenceState::Claimed);
+                realize_body();
+            }
+        }
+    });
+    image_click.connect_released(move |gesture, _, _, _| {
+        gesture.set_state(EventSequenceState::Claimed);
+        realize_body();
+    });
+    state.back_button.connect_clicked({
+        let state = state.clone();
         move |back_button| {
             if state.history.borrow().is_empty() {
                 Rc::new(Body::artists(state.clone())).set_with_history(state.clone());
             } else {
-                let mut history = state.history.borrow_mut();
                 if back_button.icon_name().unwrap() == BACK_ICON {
-                    history.pop();
+                    state.history.borrow_mut().pop();
                 } else {
-                    update_now_playing_body_realized(false);
-                    now_playing.borrow().update_other(state.clone(), BACK_ICON, &body);
+                    realize_bottom();
                 }
-                if let Some((body, adjust_scroll)) = history.last() {
-                    body.clone().set(state.clone());
-                    let Body { scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-                    if *adjust_scroll { state.scrolled_window.adjust(&body_scroll_adjustment); }
-                }
+                show_last_history();
             }
         }
     });
