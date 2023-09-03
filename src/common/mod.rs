@@ -28,7 +28,6 @@ pub trait StyledLabelBuilder {
     fn weight(self, weight: Weight) -> Self;
     fn bold(self) -> Self;
     fn subscript(self) -> Self;
-    fn bold_subscript(self) -> Self;
 }
 
 impl StyledLabelBuilder for LabelBuilder {
@@ -49,12 +48,6 @@ impl StyledLabelBuilder for LabelBuilder {
     fn subscript(self) -> Self {
         let attr_list = AttrList::new();
         attr_list.insert(AttrInt::new_font_scale(Subscript));
-        self.attributes(&attr_list)
-    }
-    fn bold_subscript(self) -> Self {
-        let attr_list = AttrList::new();
-        attr_list.insert(AttrInt::new_font_scale(Subscript));
-        attr_list.insert(AttrInt::new_weight(Bold));
         self.attributes(&attr_list)
     }
 }

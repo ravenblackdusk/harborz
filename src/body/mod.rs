@@ -4,11 +4,13 @@ use std::fs::hard_link;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
+use adw::gdk::pango::{AttrInt, AttrList, AttrType::Weight};
+use adw::gdk::pango::Weight::Bold;
 use adw::gio::{Cancellable, ListStore};
 use adw::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, update};
 use diesel::dsl::{count_distinct, count_star, max, min};
-use gtk::{Button, CenterBox, FileDialog, FileFilter, GestureClick, Grid, Image, Label, Separator, Widget};
+use gtk::{Button, FileDialog, FileFilter, GestureClick, Grid, Image, Label, Separator, Widget};
 use gtk::Orientation::Vertical;
 use id3::TagLike;
 use log::{error, warn};
@@ -257,22 +259,21 @@ impl Body {
                     album_row.append(&album_box);
                     album_box.append(&Label::builder().label(&*or_none_arc(album_string)).margin_ellipsized(4)
                         .build());
-                    let year_builder = Label::builder().margin_start(4).subscript();
-                    let count_box = gtk::Box::builder().spacing(4).build();
+                    let year_builder = Label::builder().margin_start(4).name(INSENSITIVE_FG).ellipsized().subscript();
+                    let count_box = gtk::Box::builder().spacing(4).name(INSENSITIVE_FG).build();
                     count_box.append(&Label::builder().label(&count.to_string()).subscript().build());
                     count_box.append(&Label::builder().label(count.plural(SONG)).subscript().build());
-                    let info_box = CenterBox::builder().name(INSENSITIVE_FG).start_widget(
-                        &if let Some(min_year) = min_year {
-                            year_builder.label(&if min_year == max_year.unwrap() {
-                                min_year.to_string()
-                            } else {
-                                format!("{} to {}", min_year, max_year.unwrap())
-                            })
+                    let info_box = if let Some(min_year) = min_year {
+                        year_builder.label(&if min_year == max_year.unwrap() {
+                            min_year.to_string()
                         } else {
-                            year_builder
-                        }.build()
-                    ).end_widget(&count_box).build();
+                            format!("{} to {}", min_year, max_year.unwrap())
+                        })
+                    } else {
+                        year_builder
+                    }.build();
                     album_box.append(&info_box);
+                    album_row.append(&count_box);
                     album_row.append(&next_icon());
                 }
                 merge_state.handle_pinch()
@@ -333,7 +334,7 @@ impl Body {
                 let song_id_to_labels = current_album.into_iter().enumerate().map(|(row, (song, collection))| {
                     let grid_row = (2 * row) as i32;
                     let separator_row = grid_row + 1;
-                    let track_number_builder = Label::builder().bold().margin_start(8).margin_end(8);
+                    let track_number_builder = Label::builder().margin_start(8).margin_end(8);
                     let track_number_label = if let Some(track_number) = song.track_number {
                         track_number_builder.label(&track_number.to_string())
                     } else {
@@ -341,11 +342,11 @@ impl Body {
                     }.build();
                     grid.attach(&track_number_label, 0, grid_row, 1, 1);
                     grid.attach(&Separator::builder().build(), 0, separator_row, 1, 1);
-                    let title_label = Label::builder().label(song.title_str()).ellipsized().bold()
+                    let title_label = Label::builder().label(song.title_str()).ellipsized()
                         .margin_start(8).margin_end(8).margin_top(12).margin_bottom(12).build();
                     grid.attach(&title_label, 1, grid_row, 1, 1);
                     grid.attach(&Separator::builder().build(), 1, separator_row, 1, 1);
-                    let duration_label = Label::builder().label(&format(song.duration as u64)).bold_subscript()
+                    let duration_label = Label::builder().label(&format(song.duration as u64)).subscript()
                         .margin_start(8).margin_end(8).build();
                     grid.attach(&duration_label, 2, grid_row, 1, 1);
                     grid.attach(&Separator::builder().build(), 2, separator_row, 1, 1);
@@ -372,6 +373,9 @@ impl Body {
                     if let Some(labels) = song_id_to_labels.get(&started_song_id) {
                         for label in labels {
                             label.add_css_class("accent");
+                            let attr_list = label.attributes().unwrap_or_else(AttrList::new);
+                            attr_list.insert(AttrInt::new_weight(Bold));
+                            label.set_attributes(Some(&attr_list));
                         }
                         if let Some(current_id) = current_song_id.get() {
                             if current_id != started_song_id {
@@ -379,6 +383,8 @@ impl Body {
                                 if let Some(labels) = song_id_to_labels.get(&current_id) {
                                     for label in labels {
                                         label.remove_css_class("accent");
+                                        label.set_attributes(label.attributes().unwrap_or_else(AttrList::new)
+                                            .filter(|it| { !(it.type_() == Weight) }).as_ref());
                                     }
                                 }
                             }
