@@ -6,7 +6,6 @@ use adw::glib::{timeout_add_local_once, Value};
 use adw::prelude::*;
 use gtk::{Box, Image, Orientation, ScrolledWindow, Widget};
 use gtk::builders::{BoxBuilder, LabelBuilder};
-use crate::common::constant::ACCENT_BG;
 
 pub mod util;
 pub mod constant;
@@ -106,7 +105,7 @@ impl<W: IsA<Widget>> StyledWidget for W {
         self.set_property("name", name);
     }
     fn set_background_accent(&self) {
-        self.set_name(ACCENT_BG);
+        self.set_name("accent-bg");
     }
     fn unset_background_accent(&self) {
         self.set_name(None::<String>);

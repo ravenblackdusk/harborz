@@ -14,7 +14,7 @@ use diesel::{BoolExpressionMethods, BoxableExpression, QueryDsl, RunQueryDsl};
 use diesel::dsl::InnerJoinQuerySource;
 use diesel::sql_types::Bool;
 use diesel::sqlite::Sqlite;
-use gtk::{Button, CheckButton, GestureClick, GestureZoom, Label, Overlay, ProgressBar};
+use gtk::{Align::Center, Button, CheckButton, GestureClick, GestureZoom, Label, Overlay, ProgressBar};
 use gtk::EventSequenceState::Claimed;
 use gtk::Orientation::Vertical;
 use gtk::PropagationPhase::Capture;
@@ -102,8 +102,8 @@ impl MergeState {
         merge_button.connect_clicked({
             let this = this.clone();
             move |_| {
-                let main_box = gtk::Box::builder().orientation(Vertical)
-                    .margin_start(8).margin_end(8).margin_top(8).margin_bottom(8).build();
+                let main_box = gtk::Box::builder().orientation(Vertical).spacing(4)
+                    .margin_start(12).margin_end(12).margin_top(12).margin_bottom(12).build();
                 let overlay = Overlay::builder().child(&main_box).build();
                 let dialog = Window::builder().title(&heading).modal(true).content(&overlay)
                     .transient_for(&state.window).build();
@@ -118,16 +118,15 @@ impl MergeState {
                     let check_button = Self::check_button(entity, &main_box);
                     check_button.set_group(Some(&first_check_button));
                 }
-                let button_box = gtk::Box::builder().build().with_css_class("linked");
+                let button_box = gtk::Box::builder().spacing(32).halign(Center).build();
                 main_box.append(&button_box);
-                let cancel_button = Button::builder().label("Cancel").hexpand(true).build();
+                let cancel_button = Button::builder().label("Cancel").build();
                 button_box.append(&cancel_button);
                 cancel_button.connect_clicked({
                     let dialog = dialog.clone();
                     move |_| { dialog.close(); }
                 });
-                let merge_button = Button::builder().label("Merge").hexpand(true).sensitive(false).build()
-                    .destructive_action();
+                let merge_button = Button::builder().label("Merge").sensitive(false).build().destructive_action();
                 button_box.append(&merge_button);
                 let action_group = SimpleActionGroup::new();
                 dialog.insert_action_group(MERGE_DIALOG, Some(&action_group));
@@ -150,7 +149,9 @@ impl MergeState {
                     let merge = merge.clone();
                     let this = this.clone();
                     let dialog = dialog.clone();
-                    move |_| {
+                    move |merge_button| {
+                        merge_button.set_sensitive(false);
+                        cancel_button.set_sensitive(false);
                         let variant = action.state().unwrap();
                         let progress_bar = ProgressBar::builder().hexpand(true).build().osd();
                         overlay.add_overlay(&progress_bar);

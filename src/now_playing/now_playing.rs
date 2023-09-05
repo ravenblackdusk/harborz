@@ -80,7 +80,7 @@ impl NowPlaying {
             body_image: Image::builder().pixel_size(360).vexpand(true).build(),
             position: 0,
             duration: 0,
-            progress_bar: ProgressBar::builder().name("accent-progress").build().osd(),
+            progress_bar: ProgressBar::builder().build().osd(),
             scale,
             bottom_position: Label::builder().label(&format(0)).subscript().build().numeric(),
             body_position: Label::builder().label(&format(0)).hexpand(true).halign(Start).subscript().build().numeric(),

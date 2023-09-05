@@ -46,7 +46,7 @@ fn main() -> Result<ExitCode> {
             .unwrap();
         let css_provider = CssProvider::new();
         css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
-        #accent-progress progress { background-color: @accent_fg_color; } \
+        #dialog-bg { background-color: @dialog_bg_color }
         #small-slider slider { min-width: 16px; min-height: 16px; } trough { min-height: 4px } \
         #insensitive-fg { color: alpha(@window_fg_color, 0.5) }");
         style_context_add_provider_for_display(&header_body.display(), &css_provider,
