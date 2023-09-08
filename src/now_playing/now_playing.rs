@@ -116,7 +116,7 @@ impl NowPlaying {
     fn update_image(&self, other: bool) {
         if let Some(cover) = &self.cover {
             if self.body_image.is_realized() != other { &self.body_image } else { &self.bottom_image }
-                .set_cover(cover, SONG_ICON);
+                .set_or_default(cover, SONG_ICON);
         }
     }
     fn update_position(&self, other: bool) {

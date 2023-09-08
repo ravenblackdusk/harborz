@@ -32,7 +32,7 @@ use crate::schema::config::current_song_id;
 use crate::schema::config::dsl::config;
 use crate::schema::songs::dsl::songs;
 use crate::schema::songs::path as song_path;
-use crate::song::{get_current_song, Song, WithCover};
+use crate::song::{get_current_song, Song, WithImage};
 use crate::song::WithPath;
 
 pub mod playbin;

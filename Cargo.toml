@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.73"
+anyhow = "1.0.75"
 log = "0.4.20"
 std-logger = "0.5.2"
 once_cell = "1.18.0"
@@ -19,3 +19,5 @@ gstreamer-pbutils = "0.21.0"
 id3 = "1.7.0"
 mpris-player = "0.6.2"
 serde_json = "1.0.105"
+metadata-fetch = { path = "metal-archives/metadata-fetch", version = "0.1.0" }
+metal-archives = { path = "metal-archives", version = "0.1.0" }

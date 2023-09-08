@@ -75,15 +75,15 @@ pub struct IconType {
 }
 
 pub const SONG_ICON: IconType = IconType { icon_name: "audio-x-generic" };
-pub const ALBUM_ICON: IconType = IconType { icon_name: "folder-music" };
+pub const FOLDER_MUSIC_ICON: IconType = IconType { icon_name: "folder-music" };
 
 pub trait ImagePathBuf {
-    fn set_cover(&self, cover: &PathBuf, icon_type: IconType) -> &Self;
+    fn set_or_default(&self, path: &PathBuf, icon_type: IconType) -> &Self;
 }
 
 impl ImagePathBuf for Image {
-    fn set_cover(&self, cover: &PathBuf, icon_type: IconType) -> &Self {
-        if cover.exists() { self.set_from_file(Some(&cover)); } else { self.set_icon_name(Some(icon_type.icon_name)); }
+    fn set_or_default(&self, path: &PathBuf, icon_type: IconType) -> &Self {
+        if path.exists() { self.set_from_file(Some(&path)); } else { self.set_icon_name(Some(icon_type.icon_name)); }
         self
     }
 }

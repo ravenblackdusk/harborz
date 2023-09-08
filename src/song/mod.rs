@@ -59,13 +59,17 @@ impl WithPath for (&Song, &Collection) {
     }
 }
 
-pub trait WithCover {
+pub trait WithImage {
     fn cover(&self) -> PathBuf;
+    fn logo(&self) -> PathBuf;
 }
 
-impl WithCover for PathBuf {
+impl WithImage for PathBuf {
     fn cover(&self) -> PathBuf {
         self.parent().unwrap().join("cover.jpg")
+    }
+    fn logo(&self) -> PathBuf {
+        self.parent().unwrap().parent().unwrap().join("logo.jpg")
     }
 }
 
