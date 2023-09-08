@@ -28,17 +28,18 @@ impl DirectionSwipe for GestureSwipe {
             move |gesture, _| { last_swipe_position.set(gesture.bounding_box_center()); }
         });
         self.connect_swipe(move |gesture, velocity_x, velocity_y| {
-            let (last_x, last_y) = last_swipe_position.get().unwrap();
-            let (begin_x, begin_y) = begin_swipe_position.get().unwrap();
-            let bounding_box = Rectangle::new(last_x.min(begin_x) as i32, last_y.min(begin_y) as i32,
-                (last_x - begin_x).abs() as i32, (last_y - begin_y).abs() as i32);
-            do_on_swipe(gesture, velocity_x, velocity_y, Box::new(move |direction| {
-                let (main_direction, other_direction) = match direction {
-                    Direction::Horizontal => { (bounding_box.width(), bounding_box.height()) }
-                    Direction::Vertical => { (bounding_box.height(), bounding_box.width()) }
-                };
-                0.1 * main_direction as f64 > other_direction as f64 && main_direction > 100
-            }));
+            if let Some((last_x, last_y)) = last_swipe_position.get() {
+                let (begin_x, begin_y) = begin_swipe_position.get().unwrap();
+                let bounding_box = Rectangle::new(last_x.min(begin_x) as i32, last_y.min(begin_y) as i32,
+                    (last_x - begin_x).abs() as i32, (last_y - begin_y).abs() as i32);
+                do_on_swipe(gesture, velocity_x, velocity_y, Box::new(move |direction| {
+                    let (main_direction, other_direction) = match direction {
+                        Direction::Horizontal => { (bounding_box.width(), bounding_box.height()) }
+                        Direction::Vertical => { (bounding_box.height(), bounding_box.width()) }
+                    };
+                    0.1 * main_direction as f64 > other_direction as f64 && main_direction > 100
+                }));
+            }
         });
     }
 }

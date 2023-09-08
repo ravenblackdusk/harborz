@@ -81,8 +81,9 @@ impl MergeState {
         let cancel_button = Button::builder().label("Cancel").build();
         let merge_button = Button::builder().label("Merge").build().suggested_action();
         merge_button.disable();
-        let merge_menu_button = Button::builder().label(format!("Merge {}s", string)).build();
-        let heading = format!("Choose the correct {} name", string);
+        let heading = format!("Merge {}s", string);
+        let description = format!("Choose the correct {} name", string);
+        let merge_menu_button = Button::builder().label(&heading).build();
         let this = Rc::new(MergeState {
             entity: string,
             state: state.clone(),
@@ -108,17 +109,21 @@ impl MergeState {
                 let dialog = Window::builder().title(&heading).modal(true).content(&overlay)
                     .transient_for(&state.window).build();
                 main_box.append(&Label::new(Some(&heading)).with_css_class("heading"));
+                main_box.append(&Label::new(Some(&description)));
                 let entities = this.selected_for_merge.borrow().iter().map(|entity| {
                     unsafe { entity.data::<Arc<String>>(KEY).map(|it| { it.as_ref().clone() }) }
                 }).collect::<Vec<_>>();
                 let has_none = entities.contains(&None);
                 let entities = entities.into_iter().filter_map(|it| { it }).collect::<Vec<_>>();
-                let first_check_button = Self::check_button(&entities[0], &main_box);
+                let check_button_box
+                    = gtk::Box::builder().orientation(Vertical).margin_top(16).margin_bottom(16).build();
+                main_box.append(&check_button_box);
+                let first_check_button = Self::check_button(&entities[0], &check_button_box);
                 for entity in &entities[1..] {
-                    let check_button = Self::check_button(entity, &main_box);
+                    let check_button = Self::check_button(entity, &check_button_box);
                     check_button.set_group(Some(&first_check_button));
                 }
-                let button_box = gtk::Box::builder().spacing(32).halign(Center).build();
+                let button_box = gtk::Box::builder().spacing(16).halign(Center).build();
                 main_box.append(&button_box);
                 let cancel_button = Button::builder().label("Cancel").build();
                 button_box.append(&cancel_button);
@@ -126,7 +131,7 @@ impl MergeState {
                     let dialog = dialog.clone();
                     move |_| { dialog.close(); }
                 });
-                let merge_button = Button::builder().label("Merge").sensitive(false).build().destructive_action();
+                let merge_button = Button::builder().label("Merge").sensitive(false).build();
                 button_box.append(&merge_button);
                 let action_group = SimpleActionGroup::new();
                 dialog.insert_action_group(MERGE_DIALOG, Some(&action_group));
@@ -137,7 +142,7 @@ impl MergeState {
                     let merge_button = merge_button.clone();
                     move |action, state| {
                         action.set_state(state.unwrap());
-                        merge_button.set_sensitive(true);
+                        merge_button.clone().destructive_action().set_sensitive(true);
                     }
                 });
                 merge_button.connect_clicked({
@@ -250,7 +255,7 @@ impl MergeState {
             self.update_selected_count();
             self.iterate_rows(|row| {
                 row.remove(&row.last_child().unwrap());
-                row.append(&CheckButton::new());
+                row.append(&CheckButton::builder().margin_end(8).build());
                 false
             });
         }

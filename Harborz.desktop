@@ -1,7 +1,8 @@
 [Desktop Entry]
-Type=Application
-Version=1.0
 Name=Harborz
+Icon=<harborz git directory>/icons/hicolor/scalable/apps/Harborz.png
 Exec=<harborz git directory>/target/release/harborz
+Type=Application
 Categories=GNOME;GTK;Player;Audio;
 Keywords=Music;Player
+X-Purism-FormFactor=Workstation;Mobile;

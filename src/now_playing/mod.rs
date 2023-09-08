@@ -133,7 +133,9 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
             } else {
                 match PLAYBIN.set_state(Playing) {
                     Ok(_) => { play_pause.pause(); }
-                    Err(error) => { warn!("error trying to play [{}] [{}]", PLAYBIN.property::<String>(URI), error); }
+                    Err(error) => {
+                        warn!("error trying to play [{:?}] [{}]", PLAYBIN.property::<Option<String>>(URI), error);
+                    }
                 }
             }
         });

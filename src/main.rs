@@ -1,15 +1,18 @@
 use std::cell::RefCell;
+use std::env::current_dir;
 use std::ops::Deref;
 use std::rc::Rc;
 use adw::{Application, ApplicationWindow, HeaderBar, WindowTitle};
+use adw::gdk::Display;
 use adw::glib::{ExitCode, Propagation};
 use adw::prelude::*;
 use diesel::{delete, ExpressionMethods, insert_into, QueryDsl, RunQueryDsl, update};
 use diesel::migration::Result;
 use diesel_migrations::MigrationHarness;
-use gtk::{Button, CssProvider, MenuButton, Popover, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use gtk::{Button, CssProvider, IconTheme, MenuButton, Popover, ScrolledWindow, style_context_add_provider_for_display, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use gtk::Align::Fill;
 use gtk::Orientation::Vertical;
+use log::info;
 use db::MIGRATIONS;
 use NavigationType::History;
 use crate::body::{Body, BodyTable, NavigationType};
@@ -46,14 +49,17 @@ fn main() -> Result<ExitCode> {
             .unwrap();
         let css_provider = CssProvider::new();
         css_provider.load_from_data("#accent-bg { background-color: @accent_bg_color; } \
-        #dialog-bg { background-color: @dialog_bg_color }
-        #small-slider slider { min-width: 16px; min-height: 16px; } trough { min-height: 4px } \
-        #insensitive-fg { color: alpha(@window_fg_color, 0.5) }");
-        style_context_add_provider_for_display(&header_body.display(), &css_provider,
-            STYLE_PROVIDER_PRIORITY_APPLICATION);
+        #dialog-bg { background-color: @dialog_bg_color; }
+        #small-slider slider { min-width: 16px; min-height: 16px; } trough { min-height: 4px; } \
+        #insensitive-fg { color: alpha(@window_fg_color, 0.5); }");
+        let display = Display::default().unwrap();
+        style_context_add_provider_for_display(&display, &css_provider, STYLE_PROVIDER_PRIORITY_APPLICATION);
+        let working_dir = current_dir().unwrap();
+        info!("working directory is [{}]", working_dir.to_str().unwrap());
+        IconTheme::for_display(&display).add_search_path(working_dir.join("icons"));
         let window_title = WindowTitle::builder().build();
-        let window = ApplicationWindow::builder().application(application).content(&header_body)
-            .default_width(config.window_width).default_height(config.window_height)
+        let window = ApplicationWindow::builder().application(application).title("Harborz").icon_name("Harborz")
+            .content(&header_body).default_width(config.window_width).default_height(config.window_height)
             .maximized(config.maximized == 1).build();
         let window_actions = WindowActions::new(&window);
         let state = Rc::new(State {

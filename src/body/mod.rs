@@ -69,7 +69,7 @@ pub struct Body {
 }
 
 fn next_icon() -> Image {
-    Image::builder().icon_name("go-next-symbolic").margin_start(2).margin_end(8).build()
+    Image::builder().icon_name("go-next-symbolic").margin_start(10).margin_end(8).build()
 }
 
 trait Castable {
