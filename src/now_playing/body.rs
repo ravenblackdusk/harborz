@@ -7,7 +7,7 @@ use crate::common::StyledWidget;
 use crate::now_playing::now_playing::NowPlaying;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
 
-pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, GestureSwipe) {
+pub(super) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, GestureSwipe) {
     let body = gtk::Box::builder().orientation(Vertical).margin_bottom(48).build();
     let image_and_song_info = gtk::Box::builder().orientation(Vertical).build();
     body.append(&image_and_song_info);

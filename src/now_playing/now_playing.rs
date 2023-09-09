@@ -11,7 +11,7 @@ use crate::common::state::State;
 use crate::common::util::{format, format_pad};
 use crate::now_playing::playbin::PLAYBIN;
 
-pub(in crate::now_playing) struct PlayPauseInfo {
+pub(super) struct PlayPauseInfo {
     icon_name: &'static str,
     tooltip: &'static str,
 }
@@ -25,7 +25,7 @@ const PAUSE: PlayPauseInfo = PlayPauseInfo {
     tooltip: "Pause",
 };
 
-pub(in crate::now_playing) trait Playable {
+pub(super) trait Playable {
     fn change_state(&self, play_pause_info: PlayPauseInfo);
     fn play(&self);
     fn pause(&self);
@@ -71,7 +71,7 @@ impl NowPlaying {
         button.play();
         button.flat()
     }
-    pub(in crate::now_playing) fn new() -> Self {
+    pub(super) fn new() -> Self {
         let scale = Scale::builder().hexpand(true).name("small-slider").build();
         scale.set_range(0.0, 1.0);
         NowPlaying {
@@ -98,7 +98,7 @@ impl NowPlaying {
             body_artist: Label::builder().ellipsized().build(),
         }
     }
-    pub(in crate::now_playing) fn click_play_pause(&self) {
+    pub(super) fn click_play_pause(&self) {
         if self.bottom_play_pause.is_realized() { &self.bottom_play_pause } else { &self.body_play_pause }
             .emit_clicked();
     }
@@ -170,7 +170,7 @@ impl NowPlaying {
         self.update_other(state, "go-down", body);
     }
     pub fn set_album_image(&mut self, cover: PathBuf) -> Option<String> {
-        let result = if cover.exists() { cover.to_str().map(|it| { format!("file:{}", it) }) } else { None };
+        let result = if cover.exists() { cover.to_str().map(|it| { format!("file:{it}") }) } else { None };
         self.cover = Some(cover);
         self.update_image(false);
         result

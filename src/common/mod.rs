@@ -6,12 +6,14 @@ use adw::glib::{timeout_add_local_once, Value};
 use adw::prelude::*;
 use gtk::{Box, Image, Orientation, ScrolledWindow, Widget};
 use gtk::builders::{BoxBuilder, LabelBuilder};
+use crate::common::constant::SUGGESTED_ACTION;
 
 pub mod util;
 pub mod constant;
 pub mod state;
 pub mod window_action;
 pub mod gesture;
+pub mod check_button_dialog;
 
 pub fn box_builder() -> BoxBuilder {
     Box::builder().spacing(4).margin_start(4).margin_end(4).margin_top(4).margin_bottom(4)
@@ -96,7 +98,6 @@ pub trait StyledWidget {
     fn numeric(self) -> Self;
     fn flat(self) -> Self;
     fn suggested_action(self) -> Self;
-    fn destructive_action(self) -> Self;
     fn osd(self) -> Self;
 }
 
@@ -121,10 +122,7 @@ impl<W: IsA<Widget>> StyledWidget for W {
         self.with_css_class("flat")
     }
     fn suggested_action(self) -> Self {
-        self.with_css_class("suggested-action")
-    }
-    fn destructive_action(self) -> Self {
-        self.with_css_class("destructive-action")
+        self.with_css_class(SUGGESTED_ACTION)
     }
     fn osd(self) -> Self {
         self.with_css_class("osd")

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::time::{Duration, SystemTime};
@@ -62,14 +62,37 @@ impl WithPath for (&Song, &Collection) {
 pub trait WithImage {
     fn cover(&self) -> PathBuf;
     fn logo(&self) -> PathBuf;
+    fn sibling_logo(&self) -> PathBuf;
+    fn photo(&self) -> PathBuf;
+    fn sibling_photo(&self) -> PathBuf;
 }
 
-impl WithImage for PathBuf {
+fn join_parent(path_ref: impl AsRef<Path>, file_name: &str) -> PathBuf {
+    path_ref.as_ref().parent().unwrap().join(file_name)
+}
+
+fn join_grandparent(path_ref: impl AsRef<Path>, file_name: &str) -> PathBuf {
+    join_parent(path_ref.as_ref().parent().unwrap(), file_name)
+}
+
+const LOGO: &'static str = "logo.jpg";
+const PHOTO: &'static str = "photo.jpg";
+
+impl<P : AsRef<Path>> WithImage for P {
     fn cover(&self) -> PathBuf {
-        self.parent().unwrap().join("cover.jpg")
+        join_parent(self, "cover.jpg")
     }
     fn logo(&self) -> PathBuf {
-        self.parent().unwrap().parent().unwrap().join("logo.jpg")
+        join_grandparent(self, LOGO)
+    }
+    fn sibling_logo(&self) -> PathBuf {
+        join_parent(self, LOGO)
+    }
+    fn photo(&self) -> PathBuf {
+        join_grandparent(self, PHOTO)
+    }
+    fn sibling_photo(&self) -> PathBuf {
+        join_parent(self, PHOTO)
     }
 }
 

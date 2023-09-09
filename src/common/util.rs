@@ -34,7 +34,7 @@ pub fn or_none_arc(string: Option<Arc<String>>) -> Arc<String> {
 pub trait Plural: Display {
     fn plural(&self, string: &str) -> String;
     fn number_plural(&self, string: &str) -> String {
-        format!("{} {}", self, self.plural(string))
+        format!("{self} {}", self.plural(string))
     }
 }
 
@@ -46,6 +46,6 @@ impl Plural for i64 {
 
 impl Plural for usize {
     fn plural(&self, string: &str) -> String {
-        format!("{}{}", string, if *self == 1 { "" } else { "s" })
+        format!("{string}{}", if *self == 1 { "" } else { "s" })
     }
 }

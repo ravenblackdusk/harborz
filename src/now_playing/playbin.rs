@@ -21,14 +21,14 @@ use crate::schema::songs::dsl::songs;
 use crate::song::{get_current_album, Song};
 use crate::song::WithPath;
 
-pub(in crate::now_playing) const URI: &'static str = "uri";
+pub(super) const URI: &'static str = "uri";
 pub static PLAYBIN: Lazy<Pipeline> = Lazy::new(|| {
     let playbin = ElementFactory::make("playbin3").build().unwrap().downcast::<Pipeline>().unwrap();
     if let Ok((song, collection, _)) = songs.inner_join(collections).inner_join(config)
         .get_result::<(Song, Collection, Config)>(&mut get_connection()) {
         playbin.set_uri(&(&song, &collection).path());
         if let Err(error) = playbin.set_state(Paused) {
-            warn!("error setting playbin state to Paused [{}]", error);
+            warn!("error setting playbin state to Paused [{error}]");
         }
     }
     playbin.connect("about-to-finish", true, {
@@ -52,7 +52,7 @@ pub trait Playbin {
 
 impl Playbin for Pipeline {
     fn set_uri_str(&self, uri: &str) {
-        self.set_property(URI, format!("file:{}", uri));
+        self.set_property(URI, format!("file:{uri}"));
     }
     fn set_uri(&self, uri: &PathBuf) {
         self.set_uri_str(uri.to_str().unwrap());

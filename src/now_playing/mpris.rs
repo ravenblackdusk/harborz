@@ -6,7 +6,7 @@ use mpris_player::MprisPlayer;
 use crate::common::constant::APP_ID;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
 
-pub(in crate::now_playing) fn mpris_player() -> Arc<MprisPlayer> {
+pub(super) fn mpris_player() -> Arc<MprisPlayer> {
     let mpris_player = MprisPlayer::new("harborz".to_string(), "Harborz".to_string(), APP_ID.to_string());
     mpris_player.set_can_quit(false);
     mpris_player.set_can_control(false);

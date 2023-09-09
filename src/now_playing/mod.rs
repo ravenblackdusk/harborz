@@ -14,6 +14,7 @@ use gstreamer::State::{Null, Paused, Playing};
 use gtk::{EventSequenceState, ScrollType};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
+use crate::body::artists::artists;
 use crate::body::Body;
 use crate::body::collection::model::Collection;
 use crate::common::AdjustableScrolledWindow;
@@ -113,7 +114,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
         let state = state.clone();
         move |back_button| {
             if state.history.borrow().is_empty() {
-                Rc::new(Body::artists(state.clone())).set_with_history(state.clone());
+                Rc::new(artists(state.clone())).set_with_history(state.clone());
             } else {
                 if back_button.icon_name().unwrap() == BACK_ICON {
                     state.history.borrow_mut().pop();
@@ -134,7 +135,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
                 match PLAYBIN.set_state(Playing) {
                     Ok(_) => { play_pause.pause(); }
                     Err(error) => {
-                        warn!("error trying to play [{:?}] [{}]", PLAYBIN.property::<Option<String>>(URI), error);
+                        warn!("error trying to play [{:?}] [{error}]", PLAYBIN.property::<Option<String>>(URI));
                     }
                 }
             }
@@ -145,7 +146,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
         move |_, scroll_type, value| {
             if scroll_type == ScrollType::Jump {
                 if let Err(error) = PLAYBIN.seek_internal(value as u64, now_playing.clone()) {
-                    warn!("error trying to seek to [{}] [{}]", value, error);
+                    warn!("error trying to seek to [{value}] [{error}]");
                 }
             }
             Propagation::Stop

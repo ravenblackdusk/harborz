@@ -15,6 +15,7 @@ use gtk::Orientation::Vertical;
 use log::info;
 use db::MIGRATIONS;
 use crate::body::{Body, BodyTable, NavigationType::*};
+use crate::body::artists::artists;
 use crate::common::AdjustableScrolledWindow;
 use crate::common::constant::{APP_ID, BACK_ICON};
 use crate::common::state::State;
@@ -74,9 +75,7 @@ fn main() -> Result<ExitCode> {
         });
         state.window_actions.change_window_title.action.connect_activate({
             let window_title = window_title.clone();
-            move |_, variant| {
-                window_title.set_title(variant.unwrap().str().unwrap());
-            }
+            move |_, variant| { window_title.set_title(variant.unwrap().str().unwrap()); }
         });
         state.window_actions.change_window_subtitle.action.connect_activate(move |_, variant| {
             window_title.set_subtitle(variant.unwrap().str().unwrap());
@@ -109,7 +108,7 @@ fn main() -> Result<ExitCode> {
             ).put_to_history(body_scroll_adjustment, state.history.clone());
         }
         if empty_history {
-            Rc::new(Body::artists(state.clone())).set_with_history(state.clone());
+            Rc::new(artists(state.clone())).set_with_history(state.clone());
         } else if let Some((body, _)) = state.history.borrow().last() {
             body.clone().set(state.clone());
         }

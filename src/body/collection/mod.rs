@@ -5,7 +5,7 @@ use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use TryRecvError::{Disconnected, Empty};
 use adw::gio::{Cancellable, File};
-use adw::glib::{ControlFlow, timeout_add_local};
+use adw::glib::{ControlFlow::*, timeout_add_local};
 use adw::prelude::*;
 use diesel::{delete, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
 use diesel::prelude::*;
@@ -26,8 +26,9 @@ use crate::song::{import_songs, ImportProgress};
 mod r#box;
 pub mod model;
 pub mod button;
+pub mod body;
 
-pub(in crate::body) fn add_collection_box(state: Rc<State>) -> gtk::Box {
+fn add_collection_box(state: Rc<State>) -> gtk::Box {
     let add_collection_box = gtk_box(Vertical);
     let collection_box: gtk::Box = CollectionBox::new(state.history.clone());
     add_collection_box.append(&collection_box);
@@ -51,9 +52,9 @@ pub(in crate::body) fn add_collection_box(state: Rc<State>) -> gtk::Box {
                                     timeout_add_local(Duration::from_millis(500), {
                                         let collection_box = collection_box.clone();
                                         move || {
-                                            if match receiver.try_recv() {
-                                                Err(Empty) => { true }
-                                                Err(Disconnected) => { false }
+                                            match receiver.try_recv() {
+                                                Err(Empty) => Continue,
+                                                Err(Disconnected) => Break,
                                                 Ok(import_progress) => {
                                                     match import_progress {
                                                         ImportProgress::CollectionStart(id) => {
@@ -62,21 +63,21 @@ pub(in crate::body) fn add_collection_box(state: Rc<State>) -> gtk::Box {
                                                                 = ProgressBar::builder().hexpand(true).build();
                                                             collection_box.append(&progress_bar);
                                                             progress_bar_map.insert(id, progress_bar);
-                                                            true
+                                                            Continue
                                                         }
                                                         ImportProgress::Fraction(fraction) => {
                                                             progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
-                                                            true
+                                                            Continue
                                                         }
                                                         ImportProgress::CollectionEnd(id, collection_path) => {
                                                             collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
                                                             collection_box
                                                                 .add(id, &collection_path, state.history.clone());
-                                                            true
+                                                            Continue
                                                         }
                                                     }
                                                 }
-                                            } { ControlFlow::Continue } else { ControlFlow::Break }
+                                            }
                                         }
                                     });
                                     let paths = files.iter::<File>().map(|file| {
@@ -113,7 +114,7 @@ pub(in crate::body) fn add_collection_box(state: Rc<State>) -> gtk::Box {
                                     });
                                 }
                             }
-                            Err(error) => { error!("error Choosing Collection directory [{}]", error); }
+                            Err(error) => { error!("error Choosing Collection directory [{error}]"); }
                         }
                     }
                 });

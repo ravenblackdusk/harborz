@@ -9,7 +9,7 @@ use crate::common::state::State;
 use crate::common::StyledLabelBuilder;
 use crate::now_playing::now_playing::NowPlaying;
 
-pub(in crate::now_playing) fn create(now_playing: Rc<RefCell<NowPlaying>>,
+pub(super) fn create(now_playing: Rc<RefCell<NowPlaying>>,
     song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State>) -> (gtk::Box, GestureSwipe, GestureClick) {
     let now_playing_and_progress = gtk::Box::builder().orientation(Vertical).name("dialog-bg").build();
     now_playing_and_progress.append(&now_playing.borrow().progress_bar);

@@ -7,12 +7,13 @@ use prelude::*;
 use crate::body::Body;
 use crate::body::collection::model::Collection;
 use crate::common::{StyledLabelBuilder, gtk_box};
+use crate::common::constant::DESTRUCTIVE_ACTION;
 use crate::common::util::PathString;
 use crate::db::get_connection;
 use crate::schema::bodies::dsl::bodies;
 use crate::schema::collections::dsl::collections;
 
-pub(in crate::body::collection) trait CollectionBox {
+pub(super) trait CollectionBox {
     fn new(history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) -> Self;
     fn add(&self, id: i32, path: &String, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>);
 }
@@ -27,7 +28,7 @@ impl CollectionBox for gtk::Box {
     }
     fn add(&self, id: i32, path: &String, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) {
         let remove_button = Button::builder().icon_name("list-remove").build();
-        remove_button.add_css_class("destructive-action");
+        remove_button.add_css_class(DESTRUCTIVE_ACTION);
         let inner_box = gtk_box(Horizontal);
         inner_box.append(&Label::builder().label(path.to_path().file_name().unwrap().to_str().unwrap())
             .margin_ellipsized(4).build());

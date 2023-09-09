@@ -1,17 +1,23 @@
-use std::fs::File;
-use std::io;
-use std::path::Path;
+use std::collections::HashMap;
+use std::sync::mpsc::Sender;
 use anyhow::anyhow;
+use bytes::Bytes;
+use futures::{FutureExt, TryFutureExt};
+use futures::future::BoxFuture;
 use libproxy::ProxyFactory;
-use scraper::{Html, Selector};
-use ureq::{Agent, AgentBuilder, Proxy};
+use scraper::{ElementRef, Html, Selector};
 use serde_derive::Deserialize;
 use url::Url;
-use metadata_fetch::MetadataFetcher;
+use metadata_fetch::{AlbumSearch, ArtistSearch, DownloadAlbumEvent, DownloadArtistEvent, MetadataFetcher};
+use metadata_fetch::DownloadAlbumEvent::*;
+use metadata_fetch::DownloadArtistEvent::*;
+use reqwest::{Client, Proxy, Response};
+use scraper::node::Element;
+use async_std::task;
 
 pub struct MetalArchives {
     base_uri: Url,
-    agent: Agent,
+    client: Client,
 }
 
 impl MetalArchives {
@@ -19,34 +25,36 @@ impl MetalArchives {
         const BASE_URI: &'static str = "https://www.metal-archives.com";
         Self {
             base_uri: Url::parse(BASE_URI).unwrap(),
-            agent: if let [proxy] = &ProxyFactory::new().unwrap().get_proxies(BASE_URI).unwrap()[..] {
-                AgentBuilder::new().proxy(Proxy::new(&proxy).unwrap()).build()
+            client: if let [proxy, ..] = &ProxyFactory::new().unwrap().get_proxies(BASE_URI).unwrap()[..] {
+                Client::builder().proxy(Proxy::all(proxy).unwrap()).build().unwrap()
             } else {
-                Agent::new()
+                Client::new()
             },
         }
     }
-    fn get_search_response(&self, uri: &Url) -> anyhow::Result<Vec<String>> {
-        let mut search_response = self.agent.get(uri.as_str()).call()?.into_json::<SearchResponse>()?;
-        if search_response.aa_data.len() == 1 {
-            Ok(search_response.aa_data.drain(0..1).next().unwrap())
-        } else {
-            Err(anyhow!("{} matches found [{:?}]", search_response.aa_data.len(), search_response.aa_data))
-        }
+    async fn get_search_response(&self, uri: Url) -> anyhow::Result<Vec<Vec<String>>> {
+        Ok(self.client.get(uri.as_str()).send().await?.json::<SearchResponse>().await?.aa_data.into_iter().take(4)
+            .collect::<Vec<_>>())
     }
-    fn download(&self, uri_fragment: &str, ids: Vec<&str>, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let a = Html::parse_fragment(uri_fragment);
-        let uri = a.select(&Selector::parse("a").unwrap()).next().unwrap().value().attr("href").unwrap();
-        let response = self.agent.get(uri).call()?.into_string()?;
+    fn text(element_ref: ElementRef) -> String {
+        element_ref.first_child().unwrap().value().as_text().unwrap().to_string()
+    }
+    fn a() -> Selector {
+        Selector::parse("a").unwrap()
+    }
+    async fn download<'a>(&'a self, a: Element, ids: Vec<&'a str>)
+        -> anyhow::Result<Vec<Option<BoxFuture<anyhow::Result<Bytes>>>>> {
+        let uri = a.attr("href").unwrap();
+        let response = async { self.client.get(uri).send().await?.text().await }.await
+            .map_err(|it| { anyhow!("error [{it}]") })?;
         let html = Html::parse_document(&response);
-        let selector = Selector::parse(&ids.into_iter().map(|id| { format!("#{}", id) }).collect::<Vec<_>>().join(","))
-            .unwrap();
-        for element in html.select(&selector) {
-            let mut reader = self.agent.get(element.value().attr("href").unwrap()).call()?.into_reader();
-            io::copy(&mut reader,
-                &mut File::create(path.as_ref().join(format!("{}.jpg", element.value().id().unwrap())))?)?;
-        }
-        Ok(())
+        let selector = Selector::parse(&ids.iter().map(|id| { format!("#{id}") }).collect::<Vec<_>>().join(","))
+            .map_err(|it| { anyhow!("error [{it}]") })?;
+        let mut id_to_read = html.select(&selector).into_iter().map(|element| {
+            (element.value().id().unwrap(), self.client.get(element.value().attr("href").unwrap()).send()
+                .and_then(Response::bytes).map_err(|error| { anyhow!("error {error}") }).boxed())
+        }).collect::<HashMap<_, _>>();
+        Ok(ids.into_iter().map(|id| { id_to_read.remove(id) }).collect::<Vec<_>>())
     }
 }
 
@@ -57,35 +65,80 @@ struct SearchResponse {
 }
 
 impl MetadataFetcher for MetalArchives {
-    fn download_artist_logo_and_photo(&self, artist: &str, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let mut uri = self.base_uri.join("/search/ajax-band-search")?;
+    fn download_artist_logo_and_photo(&'static self, artist: &str, sender: Sender<DownloadArtistEvent>) {
+        let mut uri = self.base_uri.join("/search/ajax-band-search").unwrap();
         uri.query_pairs_mut().append_pair("field", "name").append_pair("query", artist);
-        let search_response = self.get_search_response(&uri)?;
-        if let [band_uri_fragment, ..] = &search_response[..] {
-            self.download(band_uri_fragment, vec!["logo", "photo"], path)
-        } else {
-            Err(anyhow!("band uri fragment not found [{:?}]", search_response))
-        }
+        task::spawn(self.get_search_response(uri).map(move |search_response| {
+            sender.send(DownloadArtistEvent::SearchResult(search_response.map(|search_response| {
+                search_response.into_iter().enumerate().map({
+                    let sender = sender.clone();
+                    move |(i, mut it)| {
+                        if let [_, _, _] = it[..] {
+                            let location = it.pop().unwrap();
+                            let genre = it.pop().unwrap();
+                            let band_fragment = Html::parse_fragment(&it.pop().unwrap());
+                            let a = band_fragment.select(&Self::a()).next().unwrap();
+                            let name = Self::text(a);
+                            task::spawn_local(self.download(a.value().to_owned(), vec!["logo", "photo"]).map_ok({
+                                let sender = sender.clone();
+                                move |mut images| {
+                                    if let Some(photo) = images.pop().unwrap() {
+                                        task::spawn(photo.map({
+                                            let sender = sender.clone();
+                                            move |photo| { sender.send(Photo(i, photo)).unwrap(); }
+                                        }));
+                                    }
+                                    if let Some(logo) = images.pop().unwrap() {
+                                        task::spawn(logo.map(move |logo| { sender.send(Logo(i, logo)).unwrap(); }));
+                                    }
+                                }
+                            }));
+                            Ok(ArtistSearch {
+                                name,
+                                genre,
+                                location,
+                            })
+                        } else {
+                            Err(anyhow!("unexpected band search response [{it:?}]"))
+                        }
+                    }
+                }).collect::<Vec<_>>()
+            }))).unwrap();
+        }));
     }
-    fn download_cover(&self, artist: &str, album: &str, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let mut uri = self.base_uri.join("/search/ajax-advanced/searching/albums")?;
+    fn download_cover(&'static self, artist: &str, album: &str, sender: Sender<DownloadAlbumEvent>) {
+        let mut uri = self.base_uri.join("/search/ajax-advanced/searching/albums").unwrap();
         uri.query_pairs_mut().append_pair("bandName", artist).append_pair("releaseTitle", album);
-        let search_response = self.get_search_response(&uri)?;
-        if let [_, album_uri_fragment, ..] = &search_response[..] {
-            self.download(album_uri_fragment, vec!["cover"], path)
-        } else {
-            Err(anyhow!("album uri fragment not found [{:?}]", search_response))
-        }
-    }
-}
-
-#[test]
-fn main() {
-    let archives = MetalArchives::new();
-    if let Err(error) = archives.download_artist_logo_and_photo("Haken", "/home/dusk/Desktop/") {
-        println!("error {}", error);
-    }
-    if let Err(error) = archives.download_cover("Haken", "affinity", "/home/dusk/Desktop/") {
-        println!("error {}", error);
+        task::spawn(self.get_search_response(uri).map(move |search_response| {
+            sender.send(DownloadAlbumEvent::SearchResult(search_response.map(|search_response| {
+                search_response.into_iter().enumerate().map({
+                    let sender = sender.clone();
+                    move |(i, mut it)| {
+                        if let [_, _, _] = it[..] {
+                            let album_type = it.pop().unwrap();
+                            let album_fragment = Html::parse_fragment(&it.pop().unwrap());
+                            let artist_fragment = Html::parse_fragment(&it.pop().unwrap());
+                            let a = album_fragment.select(&Self::a()).next().unwrap();
+                            let album = Self::text(a);
+                            task::spawn_local(self.download(a.value().to_owned(), vec!["cover"]).map_ok({
+                                let sender = sender.clone();
+                                move |mut cover| {
+                                    if let Some(cover) = cover.pop().unwrap() {
+                                        task::spawn(cover.map(move |cover| { sender.send(Cover(i, cover)).unwrap(); }));
+                                    }
+                                }
+                            }));
+                            Ok(AlbumSearch {
+                                artist: Self::text(artist_fragment.select(&Self::a()).next().unwrap()),
+                                album,
+                                album_type,
+                            })
+                        } else {
+                            Err(anyhow!("unexpected album search response [{it:?}]"))
+                        }
+                    }
+                }).collect::<Vec<_>>()
+            }))).unwrap();
+        }));
     }
 }
