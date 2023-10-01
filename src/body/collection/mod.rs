@@ -52,32 +52,34 @@ fn add_collection_box(state: Rc<State>) -> gtk::Box {
                                     timeout_add_local(Duration::from_millis(500), {
                                         let collection_box = collection_box.clone();
                                         move || {
-                                            match receiver.try_recv() {
-                                                Err(Empty) => Continue,
-                                                Err(Disconnected) => Break,
-                                                Ok(import_progress) => {
-                                                    match import_progress {
-                                                        ImportProgress::CollectionStart(id) => {
-                                                            last_id = Some(id);
-                                                            let progress_bar
-                                                                = ProgressBar::builder().hexpand(true).build();
-                                                            collection_box.append(&progress_bar);
-                                                            progress_bar_map.insert(id, progress_bar);
-                                                            Continue
-                                                        }
-                                                        ImportProgress::Fraction(fraction) => {
-                                                            progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
-                                                            Continue
-                                                        }
-                                                        ImportProgress::CollectionEnd(id, collection_path) => {
-                                                            collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
-                                                            collection_box
-                                                                .add(id, &collection_path, state.history.clone());
-                                                            Continue
-                                                        }
+                                            let mut last_import_progress = None;
+                                            loop {
+                                                match receiver.try_recv() {
+                                                    Err(Empty) => { break; }
+                                                    Err(Disconnected) => { return Break; }
+                                                    Ok(import_progress) => {
+                                                        last_import_progress = Some(import_progress);
                                                     }
                                                 }
                                             }
+                                            if let Some(last_import_progress) = last_import_progress {
+                                                match last_import_progress {
+                                                    ImportProgress::CollectionStart(id) => {
+                                                        last_id = Some(id);
+                                                        let progress_bar = ProgressBar::builder().hexpand(true).build();
+                                                        collection_box.append(&progress_bar);
+                                                        progress_bar_map.insert(id, progress_bar);
+                                                    }
+                                                    ImportProgress::Fraction(fraction) => {
+                                                        progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
+                                                    }
+                                                    ImportProgress::CollectionEnd(id, collection_path) => {
+                                                        collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
+                                                        collection_box.add(id, &collection_path, state.history.clone());
+                                                    }
+                                                }
+                                            }
+                                            Continue
                                         }
                                     });
                                     let paths = files.iter::<File>().map(|file| {
