@@ -71,7 +71,7 @@ fn main() -> Result<ExitCode> {
             menu_button: MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
                 .popover(&Popover::new()).build(),
             scrolled_window: ScrolledWindow::builder().vexpand(true).build(),
-            history: Rc::new(RefCell::new(Vec::new())),
+            history: RefCell::new(Vec::new()),
         });
         state.window_actions.change_window_title.action.connect_activate({
             let window_title = window_title.clone();
@@ -105,7 +105,7 @@ fn main() -> Result<ExitCode> {
         } in history_bodies {
             Body::from_body_table(body_body_type, serde_json::from_str::<Vec<Option<String>>>(&body_params).unwrap(),
                 state.clone(),
-            ).put_to_history(body_scroll_adjustment, state.history.clone());
+            ).put_to_history(body_scroll_adjustment, state.clone());
         }
         if empty_history {
             Rc::new(artists(state.clone())).set_with_history(state.clone());

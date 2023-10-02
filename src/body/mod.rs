@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -95,9 +95,9 @@ impl Body {
             BodyType::Collections => { collections(state) }
         }
     }
-    pub fn put_to_history(self, scroll_adjustment: Option<f32>, history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>) {
+    pub fn put_to_history(self, scroll_adjustment: Option<f32>, state: Rc<State>) {
         self.scroll_adjustment.set(scroll_adjustment);
-        history.borrow_mut().push((Rc::new(self), true));
+        state.history.borrow_mut().push((Rc::new(self), true));
     }
     pub fn set(self: Rc<Self>, state: Rc<State>) {
         state.back_button.set_visible(self.back_visible);

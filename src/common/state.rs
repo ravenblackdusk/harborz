@@ -13,5 +13,5 @@ pub struct State {
     pub window_actions: WindowActions,
     pub menu_button: MenuButton,
     pub scrolled_window: ScrolledWindow,
-    pub history: Rc<RefCell<Vec<(Rc<Body>, bool)>>>,
+    pub history: RefCell<Vec<(Rc<Body>, bool)>>,
 }

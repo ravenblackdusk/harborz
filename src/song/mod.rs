@@ -1,20 +1,24 @@
+use std::cmp::max;
+use std::fmt::Debug;
+use std::ops::Add;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
-use std::time::{Duration, SystemTime};
-use adw::glib::{ControlFlow, timeout_add};
-use diesel::{ExpressionMethods, insert_or_ignore_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use async_std::task;
+use diesel::{ExpressionMethods, insert_into, QueryDsl, QueryResult, RunQueryDsl, SqliteConnection, update};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
-use diesel::result::Error::NotFound;
 use gstreamer::ClockTime;
 use gstreamer::tags::*;
 use gstreamer_pbutils::Discoverer;
+use log::info;
 use once_cell::sync::Lazy;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 use crate::body::collection::model::Collection;
 use crate::common::util::PathString;
 use crate::config::Config;
-use crate::schema::collections::table as collections;
+use crate::schema::collections::{modified, table as collections};
 use crate::schema::config::dsl::config;
 use crate::schema::songs::*;
 use crate::schema::songs::dsl::songs;
@@ -78,7 +82,7 @@ fn join_grandparent(path_ref: impl AsRef<Path>, file_name: &str) -> PathBuf {
 const LOGO: &'static str = "logo.jpg";
 const PHOTO: &'static str = "photo.jpg";
 
-impl<P : AsRef<Path>> WithImage for P {
+impl<P: AsRef<Path>> WithImage for P {
     fn cover(&self) -> PathBuf {
         join_parent(self, "cover.jpg")
     }
@@ -99,66 +103,114 @@ impl<P : AsRef<Path>> WithImage for P {
 static DISCOVERER: Lazy<Discoverer> = Lazy::new(|| { Discoverer::new(ClockTime::from_seconds(30)).unwrap() });
 
 pub enum ImportProgress {
-    CollectionStart(i32),
+    CollectionStart,
     Fraction(f64),
-    CollectionEnd(i32, String),
+    CollectionEnd(Arc<RwLock<Collection>>),
 }
 
-pub fn import_songs(collection: &Collection, sender: Sender<ImportProgress>,
-    connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Option<SystemTime> {
-    sender.send(ImportProgress::CollectionStart(collection.id)).unwrap();
-    let total = WalkDir::new(&collection.path).into_iter().count() as f64;
-    let count = Arc::new(Mutex::new(0.0));
-    timeout_add(Duration::from_millis(200), {
-        let sender = sender.clone();
+trait StrTag<'a> {
+    fn as_str(&self) -> Option<&'a str>;
+}
+
+impl<'a> StrTag<'a> for Option<&'a TagValue<&str>> {
+    fn as_str(&self) -> Option<&'a str> {
+        match self {
+            Some(tag_value) => { Some(tag_value.get()) }
+            None => { None }
+        }
+    }
+}
+
+fn walk_newer_than(collection: &Arc<RwLock<Collection>>, last_modified: Option<SystemTime>)
+    -> Box<dyn Iterator<Item=walkdir::Result<DirEntry>>> {
+    let into_iter = WalkDir::new(&collection.read().unwrap().path).into_iter();
+    if let Some(last_modified) = last_modified {
+        Box::new(into_iter.filter_entry(move |entry| {
+            let metadata = entry.metadata().unwrap();
+            max(metadata.created().unwrap(), metadata.modified().unwrap()) > last_modified
+        }))
+    } else {
+        Box::new(into_iter)
+    }
+}
+
+pub fn import_songs(collection: Arc<RwLock<Collection>>, sender: Sender<ImportProgress>,
+    connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> anyhow::Result<()> {
+    sender.send(ImportProgress::CollectionStart)?;
+    let last_modified = collection.read().unwrap().modified
+        .map(|it| { UNIX_EPOCH.add(Duration::from_nanos(it as u64)) });
+    let total = walk_newer_than(&collection, last_modified).count();
+    info!("importing [{total}] new files to collection [{collection:?}]");
+    let total_f64 = total as f64;
+    let count = Arc::new(AtomicUsize::new(0));
+    task::spawn({
         let count = count.clone();
-        move || {
-            let count = count.lock().unwrap();
-            sender.send(ImportProgress::Fraction(*count / total)).unwrap();
-            if *count < total { ControlFlow::Continue } else { ControlFlow::Break }
+        let sender = sender.clone();
+        async move {
+            loop {
+                task::sleep(Duration::from_millis(500)).await;
+                let count = count.load(Ordering::Relaxed);
+                if count == total { break; }
+                sender.send(ImportProgress::Fraction(count as f64 / total_f64)).unwrap();
+            }
         }
     });
-    let result = WalkDir::new(&collection.path).into_iter().filter_map(|entry_result| {
-        *count.lock().unwrap() += 1.0;
+    let max_modified = walk_newer_than(&collection, last_modified).filter_map(|entry_result| {
+        task::block_on({
+            let count = count.clone();
+            async move { count.fetch_add(1, Ordering::Relaxed); }
+        });
         let entry = entry_result.unwrap();
         entry.file_type().is_file().then_some(entry)
     }).map(|entry| -> anyhow::Result<_> {
-        Ok(if let Ok(discoverer_info) = DISCOVERER.discover_uri(format!("file:{}", entry.path().to_str().unwrap()).as_str()) {
+        Ok(if let Ok(discoverer_info) = DISCOVERER
+            .discover_uri(format!("file:{}", entry.path().to_str().unwrap()).as_str()) {
             if discoverer_info.video_streams().is_empty() && !discoverer_info.audio_streams().is_empty() {
                 let tag_list = discoverer_info.tags().unwrap();
-                let tag_list_ref = tag_list.as_ref();
-                if let Err(NotFound) = insert_or_ignore_into(songs).values((
-                    path.eq(entry.path().strip_prefix(&collection.path)?.to_str().unwrap()),
-                    title.eq(tag_list_ref.get::<Title>().map(|it| { it.get().to_string() })),
-                    artist.eq(tag_list_ref.get::<Artist>().map(|it| { it.get().to_string() })),
-                    album.eq(tag_list_ref.get::<Album>().map(|it| { it.get().to_string() })),
-                    year.eq(tag_list_ref.get::<DateTime>().map(|it| { it.get().year() })),
-                    genre.eq(tag_list_ref.get::<Genre>().map(|it| { it.get().to_string() })),
-                    track_number.eq(tag_list_ref.get::<TrackNumber>().map(|it| { it.get() as i32 })),
-                    album_volume.eq(tag_list_ref.get::<AlbumVolumeNumber>().map(|it| { it.get() as i32 })),
-                    album_artist.eq(tag_list_ref.get::<AlbumArtist>().map(|it| { it.get().to_string() })),
+                let title_tag = tag_list.get::<Title>();
+                let artist_tag = tag_list.get::<Artist>();
+                let album_tag = tag_list.get::<Album>();
+                let datetime_tag = tag_list.get::<DateTime>();
+                let genre_tag = tag_list.get::<Genre>();
+                let track_number_tag = tag_list.get::<TrackNumber>();
+                let album_volume_number_tag = tag_list.get::<AlbumVolumeNumber>();
+                let album_artist_tag = tag_list.get::<AlbumArtist>();
+                let lyrics_tag = tag_list.get::<Lyrics>();
+                let values = (
+                    path.eq(entry.path().strip_prefix(&collection.read().unwrap().path)?.to_str().unwrap()),
+                    title.eq(title_tag.as_ref().as_str()),
+                    artist.eq(artist_tag.as_ref().as_str()),
+                    album.eq(album_tag.as_ref().as_str()),
+                    year.eq(datetime_tag.map(|it| { it.get().year() })),
+                    genre.eq(genre_tag.as_ref().as_str()),
+                    track_number.eq(track_number_tag.map(|it| { it.get() as i32 })),
+                    album_volume.eq(album_volume_number_tag.map(|it| { it.get() as i32 })),
+                    album_artist.eq(album_artist_tag.as_ref().as_str()),
                     duration.eq(discoverer_info.duration().unwrap().nseconds() as i64),
-                    lyrics.eq(tag_list_ref.get::<Lyrics>().map(|it| { it.get().to_string() })),
-                    collection_id.eq(collection.id),
-                )).execute(connection) {
-                    None
-                } else {
-                    Some(entry.metadata()?.modified()?)
-                }
+                    lyrics.eq(lyrics_tag.as_ref().as_str()),
+                    collection_id.eq(collection.read().unwrap().id),
+                );
+                insert_into(songs).values(values).on_conflict(path).do_update().set(values).execute(connection)?;
+                let metadata = entry.metadata()?;
+                Some(max(metadata.created()?, metadata.modified()?))
             } else {
                 None
             }
         } else {
             None
         })
-    }).filter_map(|result| { result.unwrap() }).max();
-    sender.send(ImportProgress::CollectionEnd(collection.id, collection.path.to_owned())).unwrap();
-    result
+    }).try_fold(None, |prev, next| next.map(|ok| max(prev, ok)))?;
+    if let Some(max_modified) = max_modified {
+        let max_modified = max_modified.duration_since(UNIX_EPOCH)?.as_nanos() as i64;
+        update(collections.find(collection.read().unwrap().id)).set(modified.eq(max_modified)).execute(connection)?;
+        collection.write().unwrap().modified = Some(max_modified);
+    }
+    Ok(sender.send(ImportProgress::CollectionEnd(collection))?)
 }
 
 pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>)
     -> QueryResult<(Song, Config, Collection)> {
-    Ok(songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)?)
+    songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)
 }
 
 pub fn get_current_album(artist_string: Option<impl AsRef<String>>, album_string: Option<impl AsRef<String>>,
