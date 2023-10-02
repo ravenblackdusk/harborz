@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, TryRecvError};
-use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use TryRecvError::{Disconnected, Empty};
 use adw::gio::{Cancellable, File};
 use adw::glib::{ControlFlow::*, timeout_add_local};
 use adw::prelude::*;
+use async_std::task;
 use diesel::{delete, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl, update};
 use diesel::prelude::*;
 use diesel::result::Error;
@@ -52,66 +52,56 @@ fn add_collection_box(state: Rc<State>) -> gtk::Box {
                                     timeout_add_local(Duration::from_millis(500), {
                                         let collection_box = collection_box.clone();
                                         move || {
-                                            let mut last_import_progress = None;
+                                            let mut last_fraction = None;
                                             loop {
                                                 match receiver.try_recv() {
                                                     Err(Empty) => { break; }
                                                     Err(Disconnected) => { return Break; }
-                                                    Ok(import_progress) => {
-                                                        last_import_progress = Some(import_progress);
-                                                    }
-                                                }
-                                            }
-                                            if let Some(last_import_progress) = last_import_progress {
-                                                match last_import_progress {
-                                                    ImportProgress::CollectionStart(id) => {
+                                                    Ok(ImportProgress::CollectionStart(id)) => {
                                                         last_id = Some(id);
                                                         let progress_bar = ProgressBar::builder().hexpand(true).build();
                                                         collection_box.append(&progress_bar);
                                                         progress_bar_map.insert(id, progress_bar);
                                                     }
-                                                    ImportProgress::Fraction(fraction) => {
-                                                        progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
-                                                    }
-                                                    ImportProgress::CollectionEnd(id, collection_path) => {
+                                                    Ok(ImportProgress::CollectionEnd(id, collection_path)) => {
                                                         collection_box.remove(&progress_bar_map[&last_id.unwrap()]);
                                                         collection_box.add(id, &collection_path, state.history.clone());
+                                                        last_fraction = None;
+                                                    }
+                                                    Ok(ImportProgress::Fraction(fraction)) => {
+                                                        last_fraction = Some(fraction);
                                                     }
                                                 }
+                                            }
+                                            if let Some(fraction) = last_fraction {
+                                                progress_bar_map[&last_id.unwrap()].set_fraction(fraction);
                                             }
                                             Continue
                                         }
                                     });
-                                    let paths = files.iter::<File>().map(|file| {
-                                        Some(file.unwrap().path()?.to_str()?.to_owned())
-                                    }).collect::<Option<Vec<_>>>().unwrap();
-                                    thread::spawn({
-                                        let sender = sender.clone();
-                                        move || {
-                                            for path_string in paths {
-                                                get_connection().transaction({
-                                                    let sender = sender.clone();
-                                                    |connection| {
-                                                        match insert_or_ignore_into(collections)
-                                                            .values(path.eq(path_string))
-                                                            .get_result::<Collection>(connection) {
-                                                            Err(Error::NotFound) => {}
-                                                            Ok(collection) => {
-                                                                if let Some(system_time)
-                                                                    = import_songs(&collection, sender, connection) {
-                                                                    update(collections.find(collection.id)).set(
-                                                                        modified.eq(system_time
-                                                                            .duration_since(UNIX_EPOCH)
-                                                                            ?.as_nanos() as i64
-                                                                        )).execute(connection)?;
-                                                                }
-                                                            }
-                                                            result => { result?; }
+                                    let paths = files.into_iter()
+                                        .map(|file| { file.unwrap().downcast::<File>().unwrap().path().unwrap() })
+                                        .collect::<Vec<_>>();
+                                    task::spawn(async move {
+                                        for path_buf in paths {
+                                            get_connection().transaction(|connection| {
+                                                match insert_or_ignore_into(collections)
+                                                    .values(path.eq(path_buf.to_str().unwrap()))
+                                                    .get_result::<Collection>(connection) {
+                                                    Err(Error::NotFound) => {}
+                                                    Ok(collection) => {
+                                                        if let Some(system_time)
+                                                            = import_songs(&collection, sender.clone(), connection) {
+                                                            update(collections.find(collection.id)).set(
+                                                                modified.eq(system_time.duration_since(UNIX_EPOCH)
+                                                                    ?.as_nanos() as i64)
+                                                            ).execute(connection)?;
                                                         }
-                                                        anyhow::Ok(())
                                                     }
-                                                }).unwrap();
-                                            }
+                                                    result => { result?; }
+                                                }
+                                                anyhow::Ok(())
+                                            }).unwrap();
                                         }
                                     });
                                 }
