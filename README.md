@@ -32,6 +32,13 @@ If you prefer to build Harborz from source, follow these steps:
 3. Navigate to the project directory and build Harborz using Cargo: `cargo build --release`
 4. Once the build process is complete, you will find the Harborz executable at `target/release/harborz`.
 
+### Cross compiling from amd64 to aarch64
+The process is very slow and the resulting binary is around 10MB larger, but it works.
+1. make sure you have docker and docker-compose installed.
+2. run `docker run --rm --privileged multiarch/qemu-user-static --reset -p yes` every once in a while to enable qemu
+ aarch64 emulation.
+3. run `docker-compose up`, you will find Harborz executable at `target/aarch64/release/harborz`.
+
 ### Adding a Desktop Icon
 To add a desktop icon for Harborz, follow these steps:
 

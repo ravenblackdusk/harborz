@@ -1,0 +1,11 @@
+version: "3.3"
+services:
+  harborz-builder-aarch64:
+    build:
+      context: .
+    image: harborz-builder-aarch64:latest
+    volumes:
+      - ${PWD}/target/aarch64/:/root/harborz/target/
+      - ${PWD}/:/root/harborz/
+      - ~/.cargo/aarch64/:/root/.cargo/
+    working_dir: /root/harborz/

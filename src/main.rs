@@ -61,6 +61,7 @@ fn main() -> Result<ExitCode> {
             .content(&header_body).default_width(config.window_width).default_height(config.window_height)
             .maximized(config.maximized == 1).build();
         let window_actions = WindowActions::new(&window);
+        let a = 0;
         let state = Rc::new(State {
             window,
             header_body,
