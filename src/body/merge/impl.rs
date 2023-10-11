@@ -5,11 +5,12 @@ use std::sync::Arc;
 use std::sync::mpsc::{channel, TryRecvError::*};
 use std::thread;
 use std::time::Duration;
+use adw::{HeaderBar, Window};
+use adw::gio::{SimpleAction, SimpleActionGroup};
 use adw::glib::{ControlFlow::*, timeout_add_local, Variant};
 use adw::prelude::*;
-use adw::Window;
 use diesel::{BoolExpressionMethods, QueryDsl, RunQueryDsl};
-use gtk::{Button, CheckButton, GestureClick, GestureZoom, Label, Overlay, ProgressBar};
+use gtk::{Button, CheckButton, GestureClick, GestureZoom, Label, MenuButton, Overlay, ProgressBar};
 use gtk::EventSequenceState::Claimed;
 use gtk::PropagationPhase::Capture;
 use id3::ErrorKind::NoTag;
@@ -19,10 +20,9 @@ use id3::Version::Id3v24;
 use log::error;
 use crate::body::collection::model::Collection;
 use crate::body::merge::{KEY, MergeButton, MergeState, Query};
-use crate::body::next_icon;
+use crate::body::{action_name, CHANGE_SUBTITLE, CHANGE_TITLE, HEADER_BAR_START_MERGE, next_icon, START_MERGE};
 use crate::common::check_button_dialog::check_button_dialog;
 use crate::common::constant::DESTRUCTIVE_ACTION;
-use crate::common::state::State;
 use crate::common::StyledWidget;
 use crate::common::util::Plural;
 use crate::db::get_connection;
@@ -31,29 +31,27 @@ use crate::schema::songs::dsl::songs;
 #[allow(unused_imports)]
 use crate::song::{Song, WithPath};
 
+const END_MERGE: &'static str = "end_merge";
+
 impl MergeState {
     pub(in crate::body) fn new<
         I: Fn(Vec<Option<String>>) -> Query + Send + Clone + 'static, N: Fn() -> Query + Send + Clone + 'static,
         T: Fn(&mut Tag, &str) + Send + Clone + 'static, M: Fn(Song, &str) + Send + Clone + 'static
-    >(string: &'static str, state: Rc<State>, title: Arc<String>, subtitle: Rc<String>, entities_box: gtk::Box,
-        get_in_filter: I, is_null: N, set_tag: T, merge: M) -> Rc<Self> {
+    >(string: &'static str, heading: Rc<String>, title: Arc<String>, subtitle: Rc<String>, entities_box: gtk::Box,
+        action_group: &SimpleActionGroup, header_bar: &HeaderBar, menu_button: &MenuButton, get_in_filter: I,
+        is_null: N, set_tag: T, merge: M) -> Rc<Self> {
         let cancel_button = Button::builder().label("Cancel").build();
         let merge_button = Button::builder().label("Merge").build().suggested_action();
         merge_button.disable();
-        let heading = format!("Merge {string}s");
         let description = format!("Choose the correct {string} name");
-        let merge_menu_button = Button::builder().label(&heading).build();
         let this = Rc::new(MergeState {
             entity: string,
-            state: state.clone(),
             title,
             subtitle,
             entities_box,
             merging: Cell::new(false),
             selected_for_merge: RefCell::new(HashSet::new()),
-            cancel_button: cancel_button.clone(),
             merge_button: merge_button.clone(),
-            merge_menu_button: merge_menu_button.clone(),
         });
         cancel_button.connect_clicked({
             let this = this.clone();
@@ -146,11 +144,38 @@ impl MergeState {
                 );
             }
         });
-        merge_menu_button.connect_clicked({
+        let start_merge = SimpleAction::new(START_MERGE, None);
+        action_group.remove_action(START_MERGE);
+        action_group.add_action(&start_merge);
+        start_merge.connect_activate({
             let this = this.clone();
-            move |_| {
-                this.start_merge();
-                this.state.menu_button.popdown();
+            move |_, _| { this.start_merge(); }
+        });
+        let header_bar_start_merge = SimpleAction::new(HEADER_BAR_START_MERGE, None);
+        action_group.remove_action(HEADER_BAR_START_MERGE);
+        action_group.add_action(&header_bar_start_merge);
+        header_bar_start_merge.connect_activate({
+            let header_bar = header_bar.clone();
+            let cancel_button = cancel_button.clone();
+            let menu_button = menu_button.clone();
+            let merge_button = merge_button.clone();
+            move |_, _| {
+                header_bar.set_show_back_button(false);
+                header_bar.pack_start(&cancel_button);
+                header_bar.remove(&menu_button);
+                header_bar.pack_end(&merge_button);
+            }
+        });
+        let end_merge = SimpleAction::new(END_MERGE, None);
+        action_group.add_action(&end_merge);
+        end_merge.connect_activate({
+            let header_bar = header_bar.clone();
+            let menu_button = menu_button.clone();
+            move |_, _| {
+                header_bar.remove(&cancel_button);
+                header_bar.set_show_back_button(true);
+                header_bar.remove(&merge_button);
+                header_bar.pack_end(&menu_button);
             }
         });
         this
@@ -166,11 +191,9 @@ impl MergeState {
     fn start_merge(&self) {
         if !self.merging.get() {
             self.merging.set(true);
-            self.state.header_bar.remove(&self.state.back_button);
-            self.state.header_bar.pack_start(&self.cancel_button);
-            self.state.header_bar.remove(&self.state.menu_button);
-            self.state.header_bar.pack_end(&self.merge_button);
-            self.state.window_actions.change_window_title.activate(format!("Merging {}s", self.entity));
+            self.entities_box.activate_action(&action_name(HEADER_BAR_START_MERGE), None).unwrap();
+            self.entities_box.activate_action(&action_name(CHANGE_TITLE),
+                Some(&format!("Merging {}s", self.entity).to_variant())).unwrap();
             self.update_selected_count();
             self.iterate_rows(|row| {
                 row.remove(&row.last_child().unwrap());
@@ -180,12 +203,9 @@ impl MergeState {
         }
     }
     fn end_merge(&self) {
-        self.state.header_bar.remove(&self.cancel_button);
-        self.state.header_bar.pack_start(&self.state.back_button);
-        self.state.header_bar.remove(&self.merge_button);
-        self.state.header_bar.pack_end(&self.state.menu_button);
-        self.state.window_actions.change_window_title.activate(&*self.title);
-        self.state.window_actions.change_window_subtitle.activate(&*self.subtitle);
+        self.entities_box.activate_action(&action_name(END_MERGE), None).unwrap();
+        self.entities_box.activate_action(&action_name(CHANGE_TITLE), Some(&self.title.to_variant())).unwrap();
+        self.entities_box.activate_action(&action_name(CHANGE_SUBTITLE), Some(&self.subtitle.to_variant())).unwrap();
         self.selected_for_merge.borrow_mut().clear();
         self.merging.set(false);
         self.iterate_rows(|row| {
@@ -196,8 +216,8 @@ impl MergeState {
     }
     fn update_selected_count(&self) {
         let count = self.selected_for_merge.borrow().len();
-        self.state.window_actions.change_window_subtitle
-            .activate(format!("{} selected", count.number_plural(&self.entity)));
+        self.entities_box.activate_action(&action_name(CHANGE_SUBTITLE),
+            Some(&format!("{} selected", count.number_plural(&self.entity)).to_variant())).unwrap();
         if count > 1 {
             self.merge_button.set_sensitive(true);
             self.merge_button.set_tooltip_text(None);

@@ -21,8 +21,6 @@ impl WindowAction {
 pub struct WindowActions {
     pub song_selected: WindowAction,
     pub stream_started: WindowAction,
-    pub change_window_title: WindowAction,
-    pub change_window_subtitle: WindowAction,
 }
 
 impl WindowActions {
@@ -30,8 +28,6 @@ impl WindowActions {
         Self {
             song_selected: WindowAction::new::<String>("song-selected", application_window),
             stream_started: WindowAction::new::<i32>("stream-started", application_window),
-            change_window_title: WindowAction::new::<String>("change-window-title", application_window),
-            change_window_subtitle: WindowAction::new::<String>("change-window-subtitle", application_window),
         }
     }
 }

@@ -7,21 +7,20 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::mpsc::TryRecvError::{Disconnected, Empty};
 use std::time::Duration;
 use adw::gdk::gdk_pixbuf::Pixbuf;
-use adw::glib::{timeout_add_local, Variant};
+use adw::glib::{timeout_add_local, timeout_add_local_once, Variant};
 use adw::glib::ControlFlow::{Break, Continue};
 use adw::prelude::*;
 use adw::Window;
 use bytes::{Buf, Bytes};
-use gtk::{Button, Image, Overlay};
+use gtk::{Adjustment, Button, Image, MenuButton, Overlay};
 use log::{error, warn};
 use once_cell::sync::Lazy;
 use metal_archives::MetalArchives;
 use crate::common::check_button_dialog::check_button_dialog;
 use crate::common::constant::SUGGESTED_ACTION;
-use crate::common::state::State;
 
-pub(super) mod albums;
-pub(super) mod songs;
+pub mod albums;
+pub mod songs;
 
 static METAL_ARCHIVES: Lazy<MetalArchives> = Lazy::new(|| { MetalArchives::new() });
 
@@ -29,8 +28,8 @@ fn append_download_button<DR: 'static, D: Fn(Sender<DR>) + 'static, S,
     HD: Fn(DR, Box<dyn Fn(anyhow::Result<Vec<anyhow::Result<S>>>)>,
         Box<dyn Fn(usize, anyhow::Result<Bytes>, Box<dyn Fn(&gtk::Box, &Image)>, usize)>) + Clone + 'static,
     HS: Fn(S) -> gtk::Box + Clone + 'static, CO: Fn(&Vec<Rc<RefCell<Vec<Option<Bytes>>>>>, usize) + Clone + 'static
->(download_label: &'static str, gtk_box: &gtk::Box, state: Rc<State>, download: D, image_vec_count: usize,
-    handle_download: HD, handle_search: HS, choose_option: CO) {
+>(download_label: &'static str, gtk_box: &gtk::Box, download: D, image_vec_count: usize, handle_download: HD,
+    handle_search: HS, choose_option: CO, menu_button: MenuButton) {
     let download_button = Button::builder().label(format!("Download {download_label}")).build();
     gtk_box.append(&download_button);
     download_button.connect_clicked(move |_| {
@@ -125,7 +124,7 @@ fn append_download_button<DR: 'static, D: Fn(Sender<DR>) + 'static, S,
                 }
             }
         });
-        state.menu_button.popdown();
+        menu_button.popdown();
     });
 }
 
@@ -137,5 +136,11 @@ fn save(path: impl AsRef<Path>, vec: Bytes) {
             }
         }
         Err(error) => { error!("error creating image [{error}]"); }
+    }
+}
+
+fn handle_scroll(scroll_adjustment: Option<f64>, adjustment: Adjustment) {
+    if let Some(scroll_adjustment) = scroll_adjustment {
+        timeout_add_local_once(Duration::from_millis(150), move || { adjustment.set_value(scroll_adjustment); });
     }
 }

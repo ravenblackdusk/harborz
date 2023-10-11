@@ -1,6 +1,5 @@
 use std::cell::{Cell, RefCell};
 use std::mem::forget;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::Duration;
@@ -14,11 +13,7 @@ use gstreamer::State::{Null, Paused, Playing};
 use gtk::{EventSequenceState, ScrollType};
 use log::warn;
 use mpris_player::{Metadata, PlaybackStatus};
-use crate::body::artists::artists;
-use crate::body::Body;
 use crate::body::collection::model::Collection;
-use crate::common::AdjustableScrolledWindow;
-use crate::common::constant::BACK_ICON;
 use crate::common::gesture::{Direction, DirectionSwipe};
 use crate::common::state::State;
 use crate::common::util::or_none;
@@ -46,43 +41,29 @@ fn go_delta_song(velocity_x: f64) {
     PLAYBIN.go_delta_song(if velocity_x > 0.0 { -1 } else { 1 }, true);
 }
 
-pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State>, body: &gtk::Box)
-    -> (gtk::Box, gtk::Box, Rc<RefCell<NowPlaying>>) {
+pub fn create(state: Rc<State>) -> (gtk::Box, gtk::Box, Rc<RefCell<NowPlaying>>) {
     let now_playing = Rc::new(RefCell::new(NowPlaying::new()));
-    let (now_playing_body, body_swipe_gesture) = body::create(now_playing.clone());
-    let (bottom_widget, bottom_swipe_gesture, image_click)
-        = bottom_widget::create(now_playing.clone(), song_selected_body.clone(), state.clone());
+    let (now_playing_body, down_button, body_swipe_gesture) = body::create(now_playing.clone());
+    let (bottom_widget, bottom_swipe_gesture, image_click) = bottom_widget::create(now_playing.clone());
     let realize_bottom = {
         let now_playing = now_playing.clone();
         let state = state.clone();
-        let body = body.clone();
         move || {
             update_now_playing_body_realized(false);
-            now_playing.borrow().update_other(state.clone(), BACK_ICON, &body);
+            now_playing.borrow().update_other(state.clone(), &state.body);
         }
     };
-    let show_last_history = {
-        let state = state.clone();
-        move || {
-            if let Some((body, adjust_scroll)) = state.history.borrow().last() {
-                body.clone().set(state.clone());
-                let Body { scroll_adjustment: body_scroll_adjustment, .. } = body.deref();
-                if *adjust_scroll { state.scrolled_window.adjust(&body_scroll_adjustment); }
-            }
-        }
-    };
-    body_swipe_gesture.connect_direction_swipe({
+    down_button.connect_clicked({
         let realize_bottom = realize_bottom.clone();
-        let show_last_history = show_last_history.clone();
-        move |gesture, velocity_x, velocity_y, direction_swipe| {
-            if direction_swipe(Direction::Horizontal) {
-                gesture.set_state(EventSequenceState::Claimed);
-                go_delta_song(velocity_x);
-            } else if velocity_y > 0.0 && direction_swipe(Direction::Vertical) {
-                gesture.set_state(EventSequenceState::Claimed);
-                realize_bottom();
-                show_last_history();
-            }
+        move |_| { realize_bottom(); }
+    });
+    body_swipe_gesture.connect_direction_swipe(move |gesture, velocity_x, velocity_y, direction_swipe| {
+        if direction_swipe(Direction::Horizontal) {
+            gesture.set_state(EventSequenceState::Claimed);
+            go_delta_song(velocity_x);
+        } else if velocity_y > 0.0 && direction_swipe(Direction::Vertical) {
+            gesture.set_state(EventSequenceState::Claimed);
+            realize_bottom();
         }
     });
     let realize_body = {
@@ -109,21 +90,6 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
     image_click.connect_released(move |gesture, _, _, _| {
         gesture.set_state(EventSequenceState::Claimed);
         realize_body();
-    });
-    state.back_button.connect_clicked({
-        let state = state.clone();
-        move |back_button| {
-            if state.history.borrow().is_empty() {
-                Rc::new(artists(state.clone())).set_with_history(state.clone());
-            } else {
-                if back_button.icon_name().unwrap() == BACK_ICON {
-                    state.history.borrow_mut().pop();
-                } else {
-                    realize_bottom();
-                }
-                show_last_history();
-            }
-        }
     });
     for play_pause in vec![now_playing.borrow().bottom_play_pause.clone(),
         now_playing.borrow().body_play_pause.clone()] {
@@ -176,7 +142,6 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
     let once = Once::new();
     state.window_actions.song_selected.action.connect_activate({
         let now_playing = now_playing.clone();
-        let state = state.clone();
         move |_, params| {
             let playing = PLAYBIN.current_state() == Playing;
             PLAYBIN.set_state(Null).unwrap();
@@ -186,7 +151,6 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
             } else {
                 now_playing.borrow().click_play_pause();
             }
-            *song_selected_body.borrow_mut() = state.history.borrow().last().map(|(body, _)| { body }).cloned();
         }
     });
     forget(PLAYBIN.bus().unwrap().add_watch_local({
@@ -238,7 +202,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
                                 .get_result::<(Collection, Song)>(connection)?;
                             update(config).set(current_song_id.eq(song.id)).execute(connection)?;
                             let title = song.title_str().to_owned();
-                            now_playing.borrow_mut().set_song_info(state.clone(), &title, or_none(&song.artist));
+                            now_playing.borrow_mut().set_song_info(&title, or_none(&song.artist));
                             let cover = (&song, &collection).path().cover();
                             let art_url = now_playing.borrow_mut().set_album_image(cover);
                             state.window_actions.stream_started.activate(song.id);
@@ -253,7 +217,7 @@ pub fn create(song_selected_body: Rc<RefCell<Option<Rc<Body>>>>, state: Rc<State
                                 genre: song.genre.map(|it| { vec![it] }),
                                 title: Some(title),
                                 track_number: song.track_number,
-                                url: Some(uri.to_string()),
+                                url: Some(uri.to_owned()),
                             });
                             anyhow::Ok(())
                         }).unwrap();

@@ -5,6 +5,7 @@ use std::time::Duration;
 use TryRecvError::{Disconnected, Empty};
 use adw::gio::{Cancellable, File};
 use adw::glib::{ControlFlow::*, timeout_add_local};
+use adw::NavigationPage;
 use adw::prelude::*;
 use async_std::task;
 use diesel::{delete, ExpressionMethods, insert_or_ignore_into, QueryDsl, RunQueryDsl};
@@ -14,6 +15,7 @@ use gtk::{Button, FileDialog, Label, ProgressBar};
 use gtk::Orientation::{Horizontal, Vertical};
 use log::error;
 use crate::body::collection::model::Collection;
+use crate::body::{action_name, RERENDER};
 use crate::common::{gtk_box, StyledLabelBuilder, StyledWidget};
 use crate::common::constant::DESTRUCTIVE_ACTION;
 use crate::common::state::State;
@@ -26,7 +28,7 @@ use crate::song::{import_songs, ImportProgress};
 
 pub mod model;
 pub mod button;
-pub mod body;
+pub mod page;
 
 fn handle_progress<F: Fn(Arc<RwLock<Collection>>) + 'static>(collections_box: &gtk::Box, on_collection_end: F)
     -> Sender<ImportProgress> {
@@ -87,11 +89,12 @@ fn add(collections_box: &gtk::Box, collection: Arc<RwLock<Collection>>, state: R
     remove_button.connect_clicked({
         let collections_box = collections_box.clone();
         move |_| {
-            get_connection().transaction(|connection| {
-                delete(collections.find(id)).execute(connection)?;
-                delete(bodies).execute(connection)
-            }).unwrap();
-            state.history.borrow_mut().clear();
+            delete(collections.find(id)).execute(&mut get_connection()).unwrap();
+            let pages = state.navigation_view.navigation_stack();
+            for navigation_page in pages.iter::<NavigationPage>().take((pages.n_items() - 1) as usize) {
+                // rerender all except last page which is Collection page
+                navigation_page.unwrap().activate_action(&action_name(RERENDER), None).unwrap();
+            }
             collections_box.remove(&collection_box);
         }
     });
@@ -117,7 +120,6 @@ fn add_collection_box(state: Rc<State>) -> gtk::Box {
                             Ok(files) => {
                                 if let Some(files) = files {
                                     delete(bodies).execute(&mut get_connection()).unwrap();
-                                    state.history.borrow_mut().clear();
                                     let paths = files.into_iter()
                                         .map(|file| { file.unwrap().downcast::<File>().unwrap().path().unwrap() })
                                         .collect::<Vec<_>>();

@@ -1,22 +1,16 @@
-use std::cell::Cell;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
+use adw::{HeaderBar, NavigationPage, WindowTitle};
+use adw::gio::{SimpleAction, SimpleActionGroup};
 use adw::prelude::*;
-use gtk::{Image, Label, Widget};
+use gtk::{Image, Label, MenuButton, Popover, ScrolledWindow, Widget};
 use gtk::Orientation::Vertical;
-use crate::body::download::albums::albums;
-use crate::body::artists::artists;
-use crate::body::collection::body::collections;
-use crate::body::merge::MergeState;
-use crate::body::download::songs::songs_body;
-use crate::common::AdjustableScrolledWindow;
 use crate::common::state::State;
 
 pub mod collection;
 mod merge;
 pub mod artists;
-mod download;
+pub mod download;
 
 #[derive(diesel::Queryable, diesel::Selectable, Debug)]
 #[diesel(table_name = crate::schema::bodies)]
@@ -25,33 +19,15 @@ pub struct BodyTable {
     pub id: i32,
     pub body_type: BodyType,
     pub scroll_adjustment: Option<f32>,
-    pub navigation_type: NavigationType,
     pub params: String,
 }
 
-#[derive(Debug, PartialEq, diesel_derive_enum::DbEnum)]
+#[derive(Debug, diesel_derive_enum::DbEnum)]
 pub enum BodyType {
     Artists,
     Albums,
     Songs,
     Collections,
-}
-
-#[derive(Debug, diesel_derive_enum::DbEnum)]
-pub enum NavigationType {
-    History,
-    SongSelected,
-}
-
-pub struct Body {
-    back_visible: bool,
-    title: Arc<String>,
-    subtitle: Rc<String>,
-    popover_box: gtk::Box,
-    pub body_type: BodyType,
-    pub params: Vec<Option<Arc<String>>>,
-    pub scroll_adjustment: Cell<Option<f32>>,
-    pub widget: Box<dyn AsRef<Widget>>,
 }
 
 fn next_icon() -> Image {
@@ -77,47 +53,94 @@ impl Castable for Option<Widget> {
 const ARTIST: &'static str = "Artist";
 const ALBUM: &'static str = "Album";
 const SONG: &'static str = "Song";
+const RERENDER: &'static str = "rerender";
+pub const PARAMS: &'static str = "params";
+pub const BODY_TYPE: &'static str = "body_type";
 
-fn popover_box(state: Rc<State>, merge_state: Rc<MergeState>) -> gtk::Box {
-    let gtk_box = gtk::Box::builder().orientation(Vertical).build();
-    gtk_box.append(&collection::button::create(state.clone()));
-    gtk_box.append(&merge_state.merge_menu_button);
-    gtk_box
+struct Body {
+    action_group: SimpleActionGroup,
+    rerender: SimpleAction,
+    menu_button: MenuButton,
+    window_title: WindowTitle,
+    header_bar: HeaderBar,
+    scrolled_window: ScrolledWindow,
+    popover_box: gtk::Box,
+    navigation_page: NavigationPage,
 }
 
 impl Body {
-    pub fn from_body_table(body_type: BodyType, params: Vec<Option<String>>, state: Rc<State>) -> Self {
-        let params = params.into_iter().map(|it| { it.map(Arc::new) }).collect();
-        match body_type {
-            BodyType::Artists => { artists(state) }
-            BodyType::Albums => { albums(params, state) }
-            BodyType::Songs => { songs_body(params, state) }
-            BodyType::Collections => { collections(state) }
-        }
-    }
-    pub fn put_to_history(self, scroll_adjustment: Option<f32>, state: Rc<State>) {
-        self.scroll_adjustment.set(scroll_adjustment);
-        state.history.borrow_mut().push((Rc::new(self), true));
-    }
-    pub fn set(self: Rc<Self>, state: Rc<State>) {
-        state.back_button.set_visible(self.back_visible);
-        state.window_actions.change_window_title.activate(&*self.title);
-        state.window_actions.change_window_subtitle.activate(&*self.subtitle);
-        state.menu_button.set_visible(if self.popover_box.first_child() == None {
-            false
-        } else {
-            state.menu_button.popover().unwrap().set_child(Some(&self.popover_box));
-            true
+    fn new(title: &str, state: Rc<State>, tag: Option<&str>, params: Vec<Option<Arc<String>>>, body_type: BodyType)
+        -> Self {
+        let action_group = SimpleActionGroup::new();
+        let rerender = SimpleAction::new(RERENDER, None);
+        action_group.add_action(&rerender);
+        let popover_box = gtk::Box::builder().orientation(Vertical).build();
+        let menu_button = MenuButton::builder().icon_name("open-menu-symbolic").tooltip_text("Menu")
+            .popover(&Popover::builder().child(&popover_box).build()).build();
+        popover_box.append(&collection::button::create(state, &menu_button));
+        let child = gtk::Box::builder().orientation(Vertical).build();
+        let window_title = WindowTitle::builder().title(title).build();
+        let header_bar = HeaderBar::builder().title_widget(&window_title).build();
+        child.append(&header_bar);
+        let scrolled_window = ScrolledWindow::builder().vexpand(true).build();
+        child.append(&scrolled_window);
+        header_bar.pack_end(&menu_button);
+        let pop_down = SimpleAction::new(POP_DOWN, None);
+        action_group.add_action(&pop_down);
+        pop_down.connect_activate({
+            let menu_button = menu_button.clone();
+            move |_, _| { menu_button.popdown(); }
         });
-        state.scrolled_window.set_child(Some((*self.widget).as_ref()));
-    }
-    pub fn set_with_history(self: Rc<Self>, state: Rc<State>) {
-        self.clone().set(state.clone());
-        let mut history = state.history.borrow_mut();
-        if let Some((body, _)) = history.last() {
-            let Body { scroll_adjustment, .. } = body.deref();
-            scroll_adjustment.set(state.scrolled_window.get_adjustment());
+        let change_title = SimpleAction::new(CHANGE_TITLE, Some(&String::static_variant_type()));
+        action_group.add_action(&change_title);
+        change_title.connect_activate({
+            let window_title = window_title.clone();
+            move |_, entity| { window_title.set_title(entity.unwrap().str().unwrap()); }
+        });
+        let change_subtitle = SimpleAction::new(CHANGE_SUBTITLE, Some(&String::static_variant_type()));
+        action_group.add_action(&change_subtitle);
+        change_subtitle.connect_activate({
+            let window_title = window_title.clone();
+            move |_, entity| { window_title.set_subtitle(entity.unwrap().str().unwrap()); }
+        });
+        let navigation_page = create_navigation_page(&child, tag.unwrap_or(title), params, body_type);
+        navigation_page.insert_action_group(NAVIGATION_PAGE, Some(&action_group));
+        Self {
+            action_group,
+            rerender,
+            menu_button,
+            window_title,
+            header_bar,
+            scrolled_window,
+            popover_box,
+            navigation_page,
         }
-        history.push((self, false));
     }
+}
+
+const POP_DOWN: &'static str = "pop_down";
+const CHANGE_TITLE: &'static str = "change_title";
+const CHANGE_SUBTITLE: &'static str = "change_subtitle";
+
+fn create_navigation_page(child: &gtk::Box, tag: &str, params: Vec<Option<Arc<String>>>, body_type: BodyType)
+    -> NavigationPage {
+    let navigation_page = NavigationPage::builder().child(child).title(tag).tag(tag).build();
+    unsafe {
+        navigation_page.set_data(PARAMS, params);
+        navigation_page.set_data(BODY_TYPE, body_type);
+    }
+    navigation_page
+}
+
+const NAVIGATION_PAGE: &'static str = "navigation_page";
+const START_MERGE: &'static str = "start_merge";
+const HEADER_BAR_START_MERGE: &'static str = "header_bar_start_merge";
+
+fn action_name(name: &str) -> String {
+    format!("{NAVIGATION_PAGE}.{name}")
+}
+
+fn handle_render<R: Fn() + 'static>(render: R, rerender: SimpleAction) {
+    render();
+    rerender.connect_activate(move |_, _| { render(); });
 }

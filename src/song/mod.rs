@@ -140,7 +140,7 @@ pub fn import_songs(collection: Arc<RwLock<Collection>>, sender: Sender<ImportPr
     let last_modified = collection.read().unwrap().modified
         .map(|it| { UNIX_EPOCH.add(Duration::from_nanos(it as u64)) });
     let total = walk_newer_than(&collection, last_modified).count();
-    info!("importing [{total}] new files to collection [{collection:?}]");
+    info!("importing [{total}] new files to collection [{:?}]", collection.read().unwrap());
     let total_f64 = total as f64;
     let count = Arc::new(AtomicUsize::new(0));
     task::spawn({
@@ -213,7 +213,7 @@ pub fn get_current_song(connection: &mut PooledConnection<ConnectionManager<Sqli
     songs.inner_join(config).inner_join(collections).get_result::<(Song, Config, Collection)>(connection)
 }
 
-pub fn get_current_album(artist_string: Option<impl AsRef<String>>, album_string: Option<impl AsRef<String>>,
+pub fn get_current_album(artist_string: &Option<impl AsRef<String>>, album_string: &Option<impl AsRef<String>>,
     connection: &mut PooledConnection<ConnectionManager<SqliteConnection>>) -> Vec<(Song, Collection)> {
     let statement = songs.inner_join(collections).order_by((track_number, id)).into_boxed();
     let artist_filtered_statement = if let Some(artist_string) = &artist_string {

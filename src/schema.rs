@@ -5,7 +5,6 @@ diesel::table! {
         id -> Integer,
         body_type -> crate::body::BodyTypeMapping,
         scroll_adjustment -> Nullable<Float>,
-        navigation_type -> crate::body::NavigationTypeMapping,
         params -> Text,
     }
 }

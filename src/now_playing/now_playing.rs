@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 use adw::prelude::*;
+use adw::WindowTitle;
 use gstreamer::ClockTime;
 use gstreamer::prelude::ElementExtManual;
 use gtk::{Button, Image, Label, ProgressBar, Scale};
@@ -60,6 +61,7 @@ pub struct NowPlaying {
     pub body_play_pause: Button,
     pub song: String,
     pub artist: String,
+    pub window_title: WindowTitle,
     pub bottom_song: Label,
     pub body_song: Label,
     pub bottom_artist: Label,
@@ -92,6 +94,7 @@ impl NowPlaying {
                 .child(&Image::builder().pixel_size(40).build()).build()),
             song: String::from(""),
             artist: String::from(""),
+            window_title: WindowTitle::builder().build(),
             bottom_song: Label::builder().ellipsized().bold().build(),
             body_song: Label::builder().ellipsized().build().with_css_class("title-3"),
             bottom_artist: Label::builder().ellipsized().build(),
@@ -102,12 +105,12 @@ impl NowPlaying {
         if self.bottom_play_pause.is_realized() { &self.bottom_play_pause } else { &self.body_play_pause }
             .emit_clicked();
     }
-    fn update_song_info(&self, state: Rc<State>, other: bool) {
+    fn update_song_info(&self, other: bool) {
         let (song, artist) = if self.bottom_song.is_realized() != other {
             (&self.bottom_song, &self.bottom_artist)
         } else {
-            state.window_actions.change_window_title.activate(&self.song);
-            state.window_actions.change_window_subtitle.activate(&self.artist);
+            self.window_title.set_title(&self.song);
+            self.window_title.set_subtitle(&self.artist);
             (&self.body_song, &self.body_artist)
         };
         song.set_label(&self.song);
@@ -140,16 +143,16 @@ impl NowPlaying {
         }.set_label(&format(self.duration));
         self.update_position(other);
     }
-    pub fn set_song_info(&mut self, state: Rc<State>, song: &str, artist: &str) {
+    pub fn set_song_info(&mut self, song: &str, artist: &str) {
         self.song = String::from(song);
         self.artist = String::from(artist);
-        self.update_song_info(state, false);
+        self.update_song_info(false);
     }
     pub fn set_duration(&mut self) {
         self.duration = PLAYBIN.query_duration().map(ClockTime::nseconds).unwrap_or(0);
         self.update_duration_and_position(false);
     }
-    pub fn update_other(&self, state: Rc<State>, icon_name: &str, body: &gtk::Box) {
+    pub fn update_other(&self, state: Rc<State>, body: &gtk::Box) {
         self.update_image(true);
         self.update_duration_and_position(true);
         let (current_play_pause, other_play_pause) = if self.bottom_play_pause.is_realized() {
@@ -160,14 +163,11 @@ impl NowPlaying {
         if let Some(tooltip) = current_play_pause.tooltip_text() {
             other_play_pause.change_state(if tooltip.as_str() == "Play" { PLAY } else { PAUSE });
         }
-        self.update_song_info(state.clone(), true);
-        state.back_button.set_visible(true);
-        state.back_button.set_icon_name(icon_name);
-        state.header_body.remove(&state.header_body.last_child().unwrap());
-        state.header_body.append(body);
+        self.update_song_info(true);
+        state.window.set_content(Some(body));
     }
     pub fn realize_body(&self, state: Rc<State>, body: &gtk::Box) {
-        self.update_other(state, "go-down", body);
+        self.update_other(state, body);
     }
     pub fn set_album_image(&mut self, cover: PathBuf) -> Option<String> {
         let result = if cover.exists() { cover.to_str().map(|it| { format!("file:{it}") }) } else { None };

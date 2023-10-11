@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use adw::HeaderBar;
 use adw::prelude::*;
 use gtk::{Button, GestureSwipe, Image};
 use gtk::Orientation::Vertical;
@@ -7,8 +8,12 @@ use crate::common::StyledWidget;
 use crate::now_playing::now_playing::NowPlaying;
 use crate::now_playing::playbin::{PLAYBIN, Playbin};
 
-pub(super) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, GestureSwipe) {
+pub(super) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, Button, GestureSwipe) {
     let body = gtk::Box::builder().orientation(Vertical).margin_bottom(48).build();
+    let header_bar = HeaderBar::builder().title_widget(&now_playing.borrow().window_title).build();
+    body.append(&header_bar);
+    let down_button = Button::builder().icon_name("go-down").build();
+    header_bar.pack_start(&down_button);
     let image_and_song_info = gtk::Box::builder().orientation(Vertical).build();
     body.append(&image_and_song_info);
     image_and_song_info.append(&now_playing.borrow().body_image);
@@ -37,5 +42,5 @@ pub(super) fn create(now_playing: Rc<RefCell<NowPlaying>>) -> (gtk::Box, Gesture
     controls.append(&skip_backward);
     controls.append(&now_playing.borrow().body_play_pause);
     controls.append(&skip_forward);
-    (body, skip_song_gesture)
+    (body, down_button, skip_song_gesture)
 }
